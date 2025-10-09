@@ -1,0 +1,25 @@
+name: chatkit_coach_demo
+description: Example Flutter app demonstrating the ChatKit Dart client.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  chatkit_flutter:
+    path: ../../chatkit_flutter
+  chatkit_core:
+    path: ../../chatkit_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+
+flutter:
+  uses-material-design: true
+

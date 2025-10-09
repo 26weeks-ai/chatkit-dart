@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.19.0"
+          channel: "stable"
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          flutter pub get --directory=packages/chatkit_core
+          flutter pub get --directory=packages/chatkit_flutter
+          flutter pub get --directory=packages/examples/coach_demo
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed .
+      - name: Analyze
+        run: flutter analyze .
+      - name: Tests
+        run: |
+          dart test packages/chatkit_core
+          flutter test packages/chatkit_flutter
+          flutter test packages/examples/coach_demo

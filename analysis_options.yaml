@@ -1,0 +1,15 @@
+analyzer:
+  exclude:
+    - build/**
+    - "**/*.g.dart"
+  errors:
+    missing_required_param: error
+    missing_return: error
+    dead_code: error
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_final_locals
+    - avoid_escaping_inner_quotes
+    - avoid_unused_constructor_parameters

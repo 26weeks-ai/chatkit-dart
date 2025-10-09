@@ -1,0 +1,41 @@
+name: chatkit_flutter
+description: Flutter widgets and UI scaffolding for the ChatKit Dart client.
+version: 0.1.0
+homepage: https://github.com/openai/chatkit-js
+repository: https://github.com/diwakarmoturu/chatkit-dart
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  chatkit_core:
+    path: ../chatkit_core
+  flutter_markdown: ^0.7.2
+  intl: ^0.19.0
+  file_picker: ^8.0.0+1
+  image_picker: ^1.0.7
+  desktop_drop: ^0.5.0
+  cached_network_image: ^3.3.1
+  collection: ^1.18.0
+  meta: ^1.11.0
+  mime: ^1.0.5
+  video_player: ^2.8.3
+  just_audio: ^0.9.36
+  fl_chart: ^0.66.2
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+  smooth_page_indicator: ^1.1.0
+  signature: ^5.4.1
+  share_plus: ^7.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+
+flutter:
+  uses-material-design: true
