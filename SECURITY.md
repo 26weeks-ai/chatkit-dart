@@ -4,7 +4,7 @@ Follow these recommendations when deploying ChatKit with the Dart/Flutter client
 
 ## Authentication & tokens
 
-- **Hosted mode:** Implement `HostedApiConfig(getClientSecret: ...)` to fetch short-lived client tokens from your backend. Never embed static API keys in the app.
+- **Hosted mode:** Supply a short-lived `clientToken` and (optionally) a `getClientSecret` refresh hook via `HostedApiConfig` to fetch replacement tokens from your backend. Never embed static API keys in the app.
 - **Custom backend:** Use `CustomApiConfig(headersBuilder: ...)` to inject per-request auth headers (session JWT, etc.) retrieved from secure storage.
 - Rotate credentials frequently and prefer HTTPS for all endpoints.
 
@@ -41,4 +41,3 @@ Follow these recommendations when deploying ChatKit with the Dart/Flutter client
 ## Reporting vulnerabilities
 
 If you discover a vulnerability in this port, please open an issue or reach out to the repository maintainer with a detailed report so it can be addressed promptly.
-

@@ -15,12 +15,19 @@ abstract class ChatKitApiConfig {
 @immutable
 class HostedApiConfig extends ChatKitApiConfig {
   const HostedApiConfig({
-    required this.getClientSecret,
-  });
+    this.clientToken,
+    this.getClientSecret,
+  }) : assert(
+          clientToken != null || getClientSecret != null,
+          'HostedApiConfig requires either clientToken or getClientSecret.',
+        );
+
+  /// Initial client token/secret to use for hosted authentication.
+  final String? clientToken;
 
   /// Callback that provides (or refreshes) the client secret used to
   /// authenticate requests against the hosted ChatKit deployment.
-  final FutureOr<String> Function(String? currentClientSecret) getClientSecret;
+  final FutureOr<String> Function(String? currentClientSecret)? getClientSecret;
 }
 
 /// Custom backend configuration which mirrors the JS `CustomApiConfig`.
@@ -90,6 +97,7 @@ class ChatKitOptions {
     this.widgets,
     this.localizationOverrides,
     this.localization,
+    this.onLog,
   }) : theme = theme;
 
   final ChatKitApiConfig api;
@@ -109,6 +117,7 @@ class ChatKitOptions {
   final WidgetsOption? widgets;
   final Map<String, String>? localizationOverrides;
   final LocalizationOption? localization;
+  final void Function(String name, Map<String, Object?> data)? onLog;
 
   ChatKitOptions copyWith({
     ChatKitApiConfig? api,
@@ -127,6 +136,7 @@ class ChatKitOptions {
     WidgetsOption? widgets,
     Map<String, String>? localizationOverrides,
     LocalizationOption? localization,
+    void Function(String name, Map<String, Object?> data)? onLog,
   }) {
     return ChatKitOptions(
       api: api ?? this.api,
@@ -147,6 +157,7 @@ class ChatKitOptions {
       localizationOverrides:
           localizationOverrides ?? this.localizationOverrides,
       localization: localization ?? this.localization,
+      onLog: onLog ?? this.onLog,
     );
   }
 

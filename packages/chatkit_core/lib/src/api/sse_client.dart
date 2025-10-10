@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import '../errors.dart';
+import '../utils/json.dart';
+
 class SseMessage {
   SseMessage({
     this.event,
@@ -25,6 +28,9 @@ class SseClient {
       : _httpClient = httpClient ?? http.Client();
 
   final http.Client _httpClient;
+  StreamSubscription<String>? _activeResponseSubscription;
+  StreamSubscription<SseMessage>? _activeMessageSubscription;
+  StreamController<SseMessage>? _activeController;
 
   Future<void> post(
     Uri uri, {
@@ -46,6 +52,8 @@ class SseClient {
       ..body = jsonEncode(body);
 
     http.StreamedResponse? response;
+    _activeController?.close();
+    _activeController = null;
     try {
       if (sendOverride != null) {
         response = await sendOverride(request);
@@ -55,6 +63,31 @@ class SseClient {
     } catch (error, stackTrace) {
       onError?.call(error, stackTrace);
       rethrow;
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final bytes = await response.stream.toBytes();
+      final text = bytes.isEmpty ? '' : utf8.decode(bytes);
+      Map<String, Object?>? errorPayload;
+      if (text.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(text);
+          if (decoded is Map<String, Object?>) {
+            errorPayload = castMap(decoded);
+          }
+        } catch (_) {
+          // Ignore decoding errors; fall back to null payload.
+        }
+      }
+      onError?.call(
+        ChatKitServerException(
+          'Request failed with status ${response.statusCode}',
+          statusCode: response.statusCode,
+          error: errorPayload,
+        ),
+        StackTrace.current,
+      );
+      return;
     }
 
     final contentType = response.headers[HttpHeaders.contentTypeHeader];
@@ -72,6 +105,7 @@ class SseClient {
     }
 
     final controller = StreamController<SseMessage>();
+    _activeController = controller;
     Timer? keepAliveTimer;
     bool streamClosed = false;
 
@@ -81,6 +115,7 @@ class SseClient {
     }
 
     late final StreamSubscription<String> responseSubscription;
+    _activeResponseSubscription = null;
 
     void resetTimer() {
       if (keepAliveTimeout == null) {
@@ -132,10 +167,11 @@ class SseClient {
       },
       cancelOnError: true,
     );
+    _activeResponseSubscription = responseSubscription;
 
     resetTimer();
 
-    await controller.stream.listen(
+    final messageSubscription = controller.stream.listen(
       (message) async {
         if (message.retry != null) {
           onRetrySuggested?.call(message.retry!);
@@ -162,10 +198,30 @@ class SseClient {
         }
       },
       cancelOnError: true,
-    ).asFuture<void>();
+    );
+    _activeMessageSubscription = messageSubscription;
+    try {
+      await messageSubscription.asFuture<void>();
+    } finally {
+      _activeMessageSubscription = null;
+    }
 
     await responseSubscription.cancel();
+    _activeResponseSubscription = null;
     cancelTimer();
+    _activeController = null;
+  }
+
+  void cancelActive() {
+    _activeResponseSubscription?.cancel();
+    _activeResponseSubscription = null;
+    _activeMessageSubscription?.cancel();
+    _activeMessageSubscription = null;
+    final controller = _activeController;
+    if (controller != null && !controller.isClosed) {
+      controller.close();
+    }
+    _activeController = null;
   }
 
   void _handleLine(String line, StreamController<SseMessage> controller) {

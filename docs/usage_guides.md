@@ -48,6 +48,9 @@ final controller = ChatKitController(
 
 - `LocalizationOption.loader` lets you lazy-load bundles; decoded strings flow
   through `ChatKitLocalizations` and support interpolation (`{placeholder}`).
+- `ChatKitOptions.locale` is forwarded as the `Accept-Language` header on API
+  requests so server-side rendering and strings stay in sync with the active
+  Flutter locale.
 - When `colorScheme` is `ColorSchemeOption.system`, the view automatically
   tracks the platform brightness and rebinds colors in real time.
 - Component tokens (`ComponentThemeOptions`) provide a single place to override
@@ -157,7 +160,8 @@ final controller = ChatKitController(
 ```dart
 final controller = ChatKitController(
   ChatKitOptions(
-    api: const HostedApiConfig(
+    api: HostedApiConfig(
+      clientToken: initialClientToken,
       getClientSecret: fetchClientSecret,
     ),
     hostedHooks: HostedHooksOption(
@@ -180,6 +184,9 @@ final controller = ChatKitController(
   `ChatKitLogEvent(name: 'transport.retry', data: {'server_hint_ms': ...})`.
 - The hosted mode banner queue renders rate-limit notices, stale client handshakes,
   and unauthorized states using the same strings as JS.
+- You can observe the structured `chatkit.log` channel via the new
+  `ChatKitOptions.onLog` callback in addition to listening to `ChatKitLogEvent`
+  on the controller `events` stream.
 
 ## Testing Recipes
 

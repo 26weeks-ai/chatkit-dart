@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,47 +18,79 @@ class ChatKitApiClient {
   ChatKitApiClient({
     required ChatKitApiConfig apiConfig,
     http.Client? httpClient,
+    SseClient? sseClient,
   })  : _apiConfig = apiConfig,
         _httpClient = httpClient ?? http.Client(),
-        _sseClient = SseClient(httpClient: httpClient ?? http.Client());
+        _sseClient =
+            sseClient ?? SseClient(httpClient: httpClient ?? http.Client()),
+        _currentClientSecret = apiConfig is HostedApiConfig
+            ? (apiConfig as HostedApiConfig).clientToken
+            : null;
 
   final ChatKitApiConfig _apiConfig;
   final http.Client _httpClient;
   final SseClient _sseClient;
 
   String? _currentClientSecret;
+  Future<String>? _refreshingClientSecret;
+  String? _acceptLanguage;
+
+  String? get acceptLanguage => _acceptLanguage;
+
+  set acceptLanguage(String? value) {
+    final trimmed = value?.trim();
+    _acceptLanguage = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
 
   Future<Map<String, Object?>> send(
     ChatKitRequest request, {
     Map<String, Object?> bodyOverrides = const {},
   }) async {
     final uri = await _buildUri();
-    final httpRequest = http.Request('POST', uri)
-      ..headers[HttpHeaders.contentTypeHeader] = 'application/json'
-      ..body = jsonEncode({
-        ...request.toJson(),
-        ...bodyOverrides,
-      });
+    final payload = {
+      ...request.toJson(),
+      ...bodyOverrides,
+    };
+    final body = jsonEncode(payload);
+    var attemptedAuthRefresh = false;
 
-    final streamedResponse = await _sendRequest(httpRequest);
-    final response = await http.Response.fromStream(streamedResponse);
+    while (true) {
+      final httpRequest = http.Request('POST', uri)
+        ..headers[HttpHeaders.contentTypeHeader] = 'application/json'
+        ..body = body;
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ChatKitServerException(
-        'Request failed with status ${response.statusCode}',
-        statusCode: response.statusCode,
-        error: castMap(
-          response.body.isNotEmpty ? jsonDecode(response.body) : null,
-        ),
-      );
+      try {
+        final streamedResponse = await _sendRequest(httpRequest);
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw ChatKitServerException(
+            'Request failed with status ${response.statusCode}',
+            statusCode: response.statusCode,
+            error: castMap(
+              response.body.isNotEmpty ? jsonDecode(response.body) : null,
+            ),
+          );
+        }
+
+        if (response.body.isEmpty) {
+          return const {};
+        }
+
+        final json = jsonDecode(response.body);
+        return castMap(json);
+      } on ChatKitServerException catch (error) {
+        if (_canAttemptHostedRefresh(error.statusCode) &&
+            !attemptedAuthRefresh) {
+          attemptedAuthRefresh = true;
+          final refreshed = await _tryRefreshHostedSecret();
+          if (refreshed) {
+            continue;
+          }
+        }
+        rethrow;
+      }
     }
-
-    if (response.body.isEmpty) {
-      return const {};
-    }
-
-    final json = jsonDecode(response.body);
-    return castMap(json);
   }
 
   Future<void> sendStreaming(
@@ -71,43 +104,89 @@ class ChatKitApiClient {
     Map<String, Object?> bodyOverrides = const {},
   }) async {
     final uri = await _buildUri();
-    try {
-      await _sseClient.post(
-        uri,
-        body: {
-          ...request.toJson(),
-          ...bodyOverrides,
-        },
-        sendOverride: (req) => _sendRequest(req),
-        keepAliveTimeout: keepAliveTimeout,
-        onKeepAliveTimeout: onKeepAliveTimeout,
-        onRetrySuggested: onRetrySuggested,
-        onMessage: (message) async {
-          final data = message.data;
-          if (data == null || data.isEmpty) {
-            return;
-          }
+    final payload = {
+      ...request.toJson(),
+      ...bodyOverrides,
+    };
+    final Set<String> recentEventIds = LinkedHashSet<String>();
+    const maxTrackedEventIds = 64;
+    var attemptedAuthRefresh = false;
 
-          final decoded = jsonDecode(data);
-          if (decoded is List) {
-            for (final entry in decoded) {
-              await onEvent(ThreadStreamEvent.fromJson(castMap(entry)));
+    while (true) {
+      var shouldRetryAuth = false;
+      try {
+        await _sseClient.post(
+          uri,
+          body: payload,
+          sendOverride: (req) => _sendRequest(req),
+          keepAliveTimeout: keepAliveTimeout,
+          onKeepAliveTimeout: onKeepAliveTimeout,
+          onRetrySuggested: onRetrySuggested,
+          onMessage: (message) async {
+            final eventId = message.id;
+            if (eventId != null && eventId.isNotEmpty) {
+              final added = recentEventIds.add(eventId);
+              if (!added) {
+                return;
+              }
+              if (recentEventIds.length > maxTrackedEventIds) {
+                recentEventIds.remove(recentEventIds.first);
+              }
             }
-          } else if (decoded is Map<String, Object?>) {
-            await onEvent(ThreadStreamEvent.fromJson(decoded));
-          }
-        },
-        onError: onError,
-        onDone: onDone,
-      );
-    } on SocketException catch (error, stackTrace) {
-      onError?.call(error, stackTrace);
-      rethrow;
+
+            final data = message.data;
+            if (data == null || data.isEmpty) {
+              return;
+            }
+
+            final decoded = jsonDecode(data);
+            if (decoded is List) {
+              for (final entry in decoded) {
+                await onEvent(ThreadStreamEvent.fromJson(castMap(entry)));
+              }
+            } else if (decoded is Map<String, Object?>) {
+              await onEvent(ThreadStreamEvent.fromJson(decoded));
+            }
+          },
+          onError: (error, stackTrace) {
+            if (error is ChatKitServerException &&
+                _canAttemptHostedRefresh(error.statusCode) &&
+                !attemptedAuthRefresh) {
+              shouldRetryAuth = true;
+              return;
+            }
+            onError?.call(error, stackTrace);
+          },
+          onDone: onDone,
+        );
+      } on SocketException catch (error, stackTrace) {
+        onError?.call(error, stackTrace);
+        rethrow;
+      }
+
+      if (shouldRetryAuth) {
+        attemptedAuthRefresh = true;
+        recentEventIds.clear();
+        final refreshed = await _tryRefreshHostedSecret();
+        if (refreshed) {
+          continue;
+        }
+        final unauthorized = ChatKitServerException(
+          'Request failed with status 401',
+          statusCode: 401,
+        );
+        onError?.call(unauthorized, StackTrace.current);
+      }
+      break;
     }
   }
 
   Future<void> close() async {
     _httpClient.close();
+  }
+
+  void cancelActiveStream() {
+    _sseClient.cancelActive();
   }
 
   Future<Uri> _buildUri() async {
@@ -128,6 +207,10 @@ class ChatKitApiClient {
       () => 'application/json, text/event-stream',
     );
     request.headers['x-chatkit-sdk'] = 'chatkit-dart';
+    final language = _acceptLanguage;
+    if (language != null && language.isNotEmpty) {
+      request.headers[HttpHeaders.acceptLanguageHeader] = language;
+    }
 
     switch (_apiConfig) {
       case CustomApiConfig(:final domainKey, :final headersBuilder):
@@ -141,13 +224,91 @@ class ChatKitApiClient {
           }
         }
       // fetchOverride handled in _sendRequest
-      case HostedApiConfig(:final getClientSecret):
-        _currentClientSecret =
-            await Future.value(getClientSecret(_currentClientSecret));
-        request.headers['authorization'] = 'Bearer $_currentClientSecret';
+      case HostedApiConfig():
+        await _ensureHostedCredentials();
+        final secret = _currentClientSecret;
+        if (secret == null || secret.isEmpty) {
+          throw ChatKitConfigurationException(
+            'Hosted API client secret is not available.',
+          );
+        }
+        request.headers['authorization'] = 'Bearer $secret';
+        break;
       default:
         break;
     }
+  }
+
+  Future<void> _ensureHostedCredentials({bool forceRefresh = false}) async {
+    if (_apiConfig is! HostedApiConfig) {
+      return;
+    }
+    final config = _apiConfig as HostedApiConfig;
+
+    if (!forceRefresh &&
+        _currentClientSecret != null &&
+        _currentClientSecret!.isNotEmpty) {
+      return;
+    }
+
+    final getter = config.getClientSecret;
+    if (getter == null) {
+      final token = config.clientToken;
+      if (token == null || token.isEmpty) {
+        throw ChatKitConfigurationException(
+          'HostedApiConfig requires a clientToken or getClientSecret callback.',
+        );
+      }
+      _currentClientSecret = token;
+      return;
+    }
+
+    if (!forceRefresh && _refreshingClientSecret != null) {
+      _currentClientSecret = await _refreshingClientSecret!;
+      return;
+    }
+
+    final future = Future<String>.value(getter(_currentClientSecret));
+    if (!forceRefresh) {
+      _refreshingClientSecret = future;
+    }
+
+    try {
+      final secret = await future;
+      if (secret.isEmpty) {
+        throw ChatKitConfigurationException(
+          'Hosted client secret callback returned an empty value.',
+        );
+      }
+      _currentClientSecret = secret;
+    } finally {
+      if (!forceRefresh && identical(_refreshingClientSecret, future)) {
+        _refreshingClientSecret = null;
+      }
+    }
+  }
+
+  Future<bool> _tryRefreshHostedSecret() async {
+    if (_apiConfig is! HostedApiConfig) {
+      return false;
+    }
+    final config = _apiConfig as HostedApiConfig;
+    if (config.getClientSecret == null) {
+      return false;
+    }
+    await _ensureHostedCredentials(forceRefresh: true);
+    return _currentClientSecret != null && _currentClientSecret!.isNotEmpty;
+  }
+
+  bool _canAttemptHostedRefresh(int? statusCode) {
+    if (statusCode != 401) {
+      return false;
+    }
+    if (_apiConfig is! HostedApiConfig) {
+      return false;
+    }
+    final config = _apiConfig as HostedApiConfig;
+    return config.getClientSecret != null;
   }
 
   Future<http.StreamedResponse> _sendRequest(http.Request request) async {

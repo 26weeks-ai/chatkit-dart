@@ -29,7 +29,9 @@ class ChatKitController {
     ChatKitOptions options, {
     ChatKitApiClient? apiClient,
   })  : _options = options,
-        _apiClient = apiClient ?? ChatKitApiClient(apiConfig: options.api);
+        _apiClient = apiClient ?? ChatKitApiClient(apiConfig: options.api) {
+    _apiClient.acceptLanguage = options.locale;
+  }
 
   final ChatKitApiClient _apiClient;
   ChatKitOptions _options;
@@ -45,12 +47,18 @@ class ChatKitController {
   Timer? _offlineRetryTimer;
   Duration _offlineBackoff = const Duration(seconds: 2);
   bool _isStreaming = false;
+  bool _isAppActive = true;
+  bool _isLoadingThread = false;
+  final Map<String, _StreamingTextBuffer> _streamingTextBuffers = {};
+  Timer? _streamingDeltaTimer;
   final math.Random _random = math.Random();
   ChatComposerState _composerState = const ChatComposerState();
   bool _composerAvailable = true;
   String? _composerUnavailableReason;
   Timer? _composerAvailabilityTimer;
   bool _handshakeInProgress = false;
+  Timer? _resumeFetchTimer;
+  DateTime? _lastForegroundFetch;
 
   Stream<ChatKitEvent> get events => _eventController.stream;
 
@@ -58,6 +66,7 @@ class ChatKitController {
 
   set options(ChatKitOptions value) {
     _options = value;
+    _apiClient.acceptLanguage = value.locale;
   }
 
   String? get currentThreadId => _currentThreadId;
@@ -69,56 +78,117 @@ class ChatKitController {
 
   ChatComposerState get composerState => _composerState;
 
+  void _emitLog(String name, [Map<String, Object?> data = const {}]) {
+    final payload = data.isEmpty
+        ? const <String, Object?>{}
+        : Map<String, Object?>.unmodifiable(Map<String, Object?>.from(data));
+    _eventController.add(
+      ChatKitLogEvent(name: name, data: payload),
+    );
+    _options.onLog?.call(name, payload);
+  }
+
+  void _ensureIdle({bool allowThreadLoad = false}) {
+    if (!_isAppActive) {
+      throw ChatKitBusyException(
+        'Cannot perform this action while the app is backgrounded.',
+      );
+    }
+    if (_isStreaming) {
+      throw ChatKitStreamingInProgressException(
+        'Cannot perform this action while a response is streaming.',
+      );
+    }
+    if (!allowThreadLoad && _isLoadingThread) {
+      throw ChatKitBusyException(
+        'Cannot perform this action while a thread is loading.',
+      );
+    }
+  }
+
   Future<void> focusComposer() async {
     _eventController.add(const ChatKitComposerFocusEvent());
   }
 
-  Future<void> setThreadId(String? threadId) async {
-    if (threadId == _currentThreadId) {
+  void handleAppBackgrounded() {
+    if (!_isAppActive) {
       return;
     }
-    _currentThreadId = threadId;
+    _isAppActive = false;
+    _resumeFetchTimer?.cancel();
+    _resumeFetchTimer = null;
+    if (_isStreaming) {
+      _emitLog(
+        'transport.cancelled',
+        const {'reason': 'background'},
+      );
+      _apiClient.cancelActiveStream();
+      _isStreaming = false;
+    } else {
+      _apiClient.cancelActiveStream();
+    }
+    _emitLog(
+      'app.lifecycle',
+      const {'state': 'background'},
+    );
+  }
 
+  void handleAppForegrounded({bool forceRefresh = false}) {
+    if (_isAppActive) {
+      return;
+    }
+    _isAppActive = true;
+    _emitLog(
+      'app.lifecycle',
+      const {'state': 'foreground'},
+    );
+    if (_currentThreadId == null) {
+      return;
+    }
+    final now = DateTime.now();
+    final since = _lastForegroundFetch;
+    final cooldown = const Duration(seconds: 3);
+    if (forceRefresh || since == null || now.difference(since) >= cooldown) {
+      _lastForegroundFetch = now;
+      unawaited(fetchUpdates());
+      return;
+    }
+
+    final remaining = cooldown - now.difference(since);
+    _resumeFetchTimer?.cancel();
+    _resumeFetchTimer = Timer(remaining, () {
+      if (!_isAppActive) {
+        return;
+      }
+      _lastForegroundFetch = DateTime.now();
+      unawaited(fetchUpdates());
+    });
+  }
+
+  Future<void> setThreadId(String? threadId) async {
+    _ensureIdle();
     if (threadId == null) {
+      if (_currentThreadId == null && _activeThread == null) {
+        return;
+      }
+      _currentThreadId = null;
       _activeThread = null;
       _items.clear();
+      _pendingUserMessages.clear();
       _eventController.add(
         ChatKitThreadChangeEvent(threadId: null, thread: null),
       );
       return;
     }
 
-    _eventController.add(
-      ChatKitThreadLoadStartEvent(threadId: threadId),
-    );
-
-    late final Map<String, Object?> response;
-    try {
-      response = await _apiClient.send(
-        threadsGetById(threadId: threadId),
-      );
-    } catch (error) {
-      _eventController.add(
-        ChatKitThreadLoadEndEvent(threadId: threadId),
-      );
-      rethrow;
+    final isSameThread = threadId == _currentThreadId;
+    _currentThreadId = threadId;
+    if (!isSameThread) {
+      _pendingUserMessages.clear();
     }
-
-    final thread = Thread.fromJson(response);
-    _activeThread = thread;
-    _items
-      ..clear()
-      ..addEntries(
-        thread.items.map(
-          (item) => MapEntry(item.id, item),
-        ),
-      );
-
-    _eventController.add(
-      ChatKitThreadChangeEvent(threadId: threadId, thread: thread),
-    );
-    _eventController.add(
-      ChatKitThreadLoadEndEvent(threadId: threadId),
+    await _loadThread(
+      threadId: threadId,
+      emitThreadChange: true,
     );
   }
 
@@ -130,11 +200,7 @@ class ChatKitController {
     Map<String, Object?> metadata = const {},
     List<Entity>? tags,
   }) async {
-    if (_isStreaming) {
-      throw ChatKitStreamingInProgressException(
-        'Cannot send a user message while a response is streaming.',
-      );
-    }
+    _ensureIdle();
 
     final attachmentModels = (attachments ?? const [])
         .map((json) => ChatKitAttachment.fromJson(json))
@@ -269,11 +335,56 @@ class ChatKitController {
   }
 
   Future<void> fetchUpdates() async {
-    if (_currentThreadId == null) {
+    final threadId = _currentThreadId;
+    if (threadId == null) {
       return;
     }
+    _ensureIdle();
+    await _loadThread(
+      threadId: threadId,
+      emitThreadChange: true,
+    );
+  }
 
-    await setThreadId(_currentThreadId);
+  Future<void> _loadThread({
+    required String threadId,
+    required bool emitThreadChange,
+  }) async {
+    if (_isLoadingThread) {
+      throw ChatKitBusyException(
+        'A thread load operation is already in progress.',
+      );
+    }
+    _isLoadingThread = true;
+    _eventController.add(
+      ChatKitThreadLoadStartEvent(threadId: threadId),
+    );
+
+    try {
+      final response = await _apiClient.send(
+        threadsGetById(threadId: threadId),
+      );
+      final thread = Thread.fromJson(response);
+      _activeThread = thread;
+      _items
+        ..clear()
+        ..addEntries(
+          thread.items.map(
+            (item) => MapEntry(item.id, item),
+          ),
+        );
+      _pendingUserMessages.clear();
+      if (emitThreadChange) {
+        _eventController.add(
+          ChatKitThreadChangeEvent(threadId: threadId, thread: thread),
+        );
+      }
+    } finally {
+      _isLoadingThread = false;
+      _eventController.add(
+        ChatKitThreadLoadEndEvent(threadId: threadId),
+      );
+    }
   }
 
   Future<Page<ThreadMetadata>> listThreads({
@@ -408,6 +519,7 @@ class ChatKitController {
     required String threadId,
     required String itemId,
   }) async {
+    _ensureIdle();
     final request = threadsRetryAfterItem(threadId: threadId, itemId: itemId);
     await _runStreamingRequest(request);
   }
@@ -416,17 +528,32 @@ class ChatKitController {
     Map<String, Object?> action, {
     String? itemId,
   }) async {
+    _ensureIdle();
     if (_currentThreadId == null) {
       throw ChatKitConfigurationException(
         'Cannot send a custom action without an active thread.',
       );
     }
+    _emitLog(
+      'action.send',
+      {
+        'action_type': action['type'],
+        if (itemId != null) 'item_id': itemId,
+      },
+    );
     final request = threadsCustomAction(
       threadId: _currentThreadId!,
       itemId: itemId,
       action: ChatKitAction.fromJson(action),
     );
     await _runStreamingRequest(request);
+  }
+
+  Future<void> sendAction(
+    Map<String, Object?> action, {
+    String? itemId,
+  }) {
+    return sendCustomAction(action, itemId: itemId);
   }
 
   void shareItem(String itemId) {
@@ -454,106 +581,163 @@ class ChatKitController {
     final resolvedSize = size ?? bytes.length;
     onProgress?.call(0, resolvedSize);
 
-    if (_options.api is CustomApiConfig) {
-      final config = _options.api as CustomApiConfig;
-      if (config.uploadStrategy is DirectUploadStrategy) {
-        final strategy = config.uploadStrategy as DirectUploadStrategy;
-        final request = http.MultipartRequest(
-          'POST',
-          Uri.parse(strategy.uploadUrl),
-        );
-        request.headers['x-chatkit-sdk'] = 'chatkit-dart';
-        if (config.domainKey != null) {
-          request.headers['x-chatkit-domain-key'] = config.domainKey!;
-        }
-        if (config.headersBuilder != null) {
-          final additional =
-              await Future.value(config.headersBuilder!(request));
-          if (additional.isNotEmpty) {
-            request.headers.addAll(additional);
-          }
-        }
-        final progressStream = _trackedByteStream(
-          bytes,
-          isCancelled: isCancelled,
-          onProgress: onProgress,
-        );
-        request.files.add(
-          http.MultipartFile(
-            'file',
-            progressStream,
-            resolvedSize,
-            filename: name,
-            contentType: MediaType.parse(mimeType),
-          ),
-        );
-        request.fields['name'] = name;
-        request.fields['mime_type'] = mimeType;
-        request.fields['size'] = resolvedSize.toString();
+    _emitLog(
+      'attachments.upload.start',
+      {
+        'name': name,
+        'mime_type': mimeType,
+        'size': resolvedSize,
+      },
+    );
 
-        final response = await request.send();
-        final body = await response.stream.bytesToString();
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw ChatKitServerException(
-            'Direct upload failed with status ${response.statusCode}',
-            statusCode: response.statusCode,
-            error: body.isEmpty ? null : castMap(jsonDecode(body)),
-          );
-        }
-
-        final payload =
-            body.isEmpty ? <String, Object?>{} : castMap(jsonDecode(body));
-        if (payload.isEmpty) {
-          throw ChatKitException(
-            'Direct upload endpoint must return attachment metadata.',
-          );
-        }
-        return ChatKitAttachment.fromJson(payload);
-      }
-    }
-
-    Map<String, Object?> response;
+    ChatKitAttachment? attachment;
     try {
-      response = await _apiClient.send(
-        attachmentsCreate(
-          name: name,
-          size: resolvedSize,
-          mimeType: mimeType,
-        ),
-      );
-    } on ChatKitServerException catch (error) {
-      if (error.statusCode == 401) {
-        _eventController.add(const ChatKitAuthExpiredEvent());
-        _setComposerAvailability(
-          available: false,
-          reason: 'auth',
-          message: 'Authentication expired.',
-        );
-      } else if (error.statusCode == 429) {
-        _handleRateLimit(error);
-      } else if (_isStaleClientError(error)) {
-        _handleStaleClientError(error);
+      if (_options.api is CustomApiConfig) {
+        final config = _options.api as CustomApiConfig;
+        if (config.uploadStrategy is DirectUploadStrategy) {
+          attachment = await _performDirectUpload(
+            config: config,
+            strategy: config.uploadStrategy as DirectUploadStrategy,
+            name: name,
+            mimeType: mimeType,
+            bytes: bytes,
+            resolvedSize: resolvedSize,
+            onProgress: onProgress,
+            isCancelled: isCancelled,
+          );
+        }
       }
+
+      if (attachment == null) {
+        Map<String, Object?> response;
+        try {
+          response = await _apiClient.send(
+            attachmentsCreate(
+              name: name,
+              size: resolvedSize,
+              mimeType: mimeType,
+            ),
+          );
+        } on ChatKitServerException catch (error) {
+          if (error.statusCode == 401) {
+            _eventController.add(const ChatKitAuthExpiredEvent());
+            _setComposerAvailability(
+              available: false,
+              reason: 'auth',
+              message: 'Authentication expired.',
+            );
+          } else if (error.statusCode == 429) {
+            _handleRateLimit(error);
+          } else if (_isStaleClientError(error)) {
+            _handleStaleClientError(error);
+          }
+          rethrow;
+        }
+
+        attachment = ChatKitAttachment.fromJson(response);
+        if (attachment.uploadUrl != null) {
+          await _uploadToUrl(
+            attachment.uploadUrl!,
+            bytes,
+            mimeType,
+            onProgress: onProgress,
+            isCancelled: isCancelled,
+          );
+        }
+      }
+
+      onProgress?.call(resolvedSize, resolvedSize);
+      _emitLog(
+        'attachments.upload.complete',
+        {
+          'attachment_id': attachment.id,
+          'name': attachment.name,
+          'mime_type': attachment.mimeType,
+          'size': attachment.size ?? resolvedSize,
+        },
+      );
+      return attachment;
+    } catch (error) {
+      _emitLog(
+        'attachments.upload.error',
+        {
+          'name': name,
+          'mime_type': mimeType,
+          'size': resolvedSize,
+          'error': error.toString(),
+        },
+      );
       rethrow;
     }
+  }
 
-    final attachment = ChatKitAttachment.fromJson(response);
-    if (attachment.uploadUrl != null) {
-      await _uploadToUrl(
-        attachment.uploadUrl!,
-        bytes,
-        mimeType,
-        onProgress: onProgress,
-        isCancelled: isCancelled,
+  Future<ChatKitAttachment> _performDirectUpload({
+    required CustomApiConfig config,
+    required DirectUploadStrategy strategy,
+    required String name,
+    required String mimeType,
+    required List<int> bytes,
+    required int resolvedSize,
+    void Function(int sentBytes, int totalBytes)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse(strategy.uploadUrl),
+    );
+    request.headers['x-chatkit-sdk'] = 'chatkit-dart';
+    if (config.domainKey != null) {
+      request.headers['x-chatkit-domain-key'] = config.domainKey!;
+    }
+    if (config.headersBuilder != null) {
+      final additional = await Future.value(config.headersBuilder!(request));
+      if (additional.isNotEmpty) {
+        request.headers.addAll(additional);
+      }
+    }
+    final progressStream = _trackedByteStream(
+      bytes,
+      isCancelled: isCancelled,
+      onProgress: onProgress,
+    );
+    request.files.add(
+      http.MultipartFile(
+        'file',
+        progressStream,
+        resolvedSize,
+        filename: name,
+        contentType: MediaType.parse(mimeType),
+      ),
+    );
+    request.fields['name'] = name;
+    request.fields['mime_type'] = mimeType;
+    request.fields['size'] = resolvedSize.toString();
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ChatKitServerException(
+        'Direct upload failed with status ${response.statusCode}',
+        statusCode: response.statusCode,
+        error: body.isEmpty ? null : castMap(jsonDecode(body)),
       );
     }
-    onProgress?.call(resolvedSize, resolvedSize);
-    return attachment;
+
+    final payload =
+        body.isEmpty ? <String, Object?>{} : castMap(jsonDecode(body));
+    if (payload.isEmpty) {
+      throw ChatKitException(
+        'Direct upload endpoint must return attachment metadata.',
+      );
+    }
+    return ChatKitAttachment.fromJson(payload);
   }
 
   Future<void> dispose() async {
     _offlineRetryTimer?.cancel();
     _composerAvailabilityTimer?.cancel();
+    _resumeFetchTimer?.cancel();
+    _streamingDeltaTimer?.cancel();
     await _apiClient.close();
     await _eventController.close();
   }
@@ -567,6 +751,20 @@ class ChatKitController {
     if (_isStreaming && !isFollowUp) {
       throw ChatKitStreamingInProgressException(
         'Streaming request already in flight.',
+      );
+    }
+
+    if (!_isAppActive) {
+      if (allowQueue) {
+        _enqueueOfflineRequest(
+          request,
+          pendingRequestId: pendingRequestId,
+          isFollowUp: isFollowUp,
+        );
+        return _StreamingOutcome.queued;
+      }
+      throw ChatKitBusyException(
+        'Cannot perform this action while the app is backgrounded.',
       );
     }
 
@@ -633,13 +831,11 @@ class ChatKitController {
           },
           keepAliveTimeout: keepAliveTimeout,
           onKeepAliveTimeout: () {
-            _eventController.add(
-              ChatKitLogEvent(
-                name: 'transport.keepalive.timeout',
-                data: {
-                  if (_currentThreadId != null) 'threadId': _currentThreadId,
-                },
-              ),
+            _emitLog(
+              'transport.keepalive.timeout',
+              {
+                if (_currentThreadId != null) 'threadId': _currentThreadId,
+              },
             );
           },
           onRetrySuggested: (duration) {
@@ -710,15 +906,13 @@ class ChatKitController {
         serverHint: hint,
       );
       serverRetryHint = null;
-      _eventController.add(
-        ChatKitLogEvent(
-          name: 'transport.retry',
-          data: {
-            'attempt': retryCount,
-            'delay_ms': delay.inMilliseconds,
-            if (hint != null) 'server_hint_ms': hint.inMilliseconds,
-          },
-        ),
+      _emitLog(
+        'transport.retry',
+        {
+          'attempt': retryCount,
+          'delay_ms': delay.inMilliseconds,
+          if (hint != null) 'server_hint_ms': hint.inMilliseconds,
+        },
       );
       await Future.delayed(delay);
     }
@@ -1018,11 +1212,9 @@ class ChatKitController {
       return;
     }
     _handshakeInProgress = true;
-    _eventController.add(
-      ChatKitLogEvent(
-        name: 'transport.handshake.start',
-        data: const {'status': 'pending'},
-      ),
+    _emitLog(
+      'transport.handshake.start',
+      const {'status': 'pending'},
     );
     try {
       final callback = _options.hostedHooks?.onStaleClient;
@@ -1033,11 +1225,9 @@ class ChatKitController {
         await fetchUpdates();
       }
       _setComposerAvailability(available: true, reason: 'stale_client');
-      _eventController.add(
-        ChatKitLogEvent(
-          name: 'transport.handshake.complete',
-          data: const {'status': 'ok'},
-        ),
+      _emitLog(
+        'transport.handshake.complete',
+        const {'status': 'ok'},
       );
     } catch (error, stackTrace) {
       _eventController.add(
@@ -1131,27 +1321,24 @@ class ChatKitController {
     }
     final level = _noticeLevelFromString(event.level);
     final retryAfter = _parseRetryAfter(event.data);
-    _eventController
-      ..add(
-        ChatKitNoticeEvent(
-          message: event.message,
-          title: event.title,
-          level: level,
-          code: event.code,
-          retryAfter: retryAfter,
-        ),
-      )
-      ..add(
-        ChatKitLogEvent(
-          name: 'notice',
-          data: {
-            'level': event.level,
-            'message': event.message,
-            if (event.title != null) 'title': event.title,
-            if (event.code != null) 'code': event.code,
-          },
-        ),
-      );
+    _eventController.add(
+      ChatKitNoticeEvent(
+        message: event.message,
+        title: event.title,
+        level: level,
+        code: event.code,
+        retryAfter: retryAfter,
+      ),
+    );
+    _emitLog(
+      'notice',
+      {
+        'level': event.level,
+        'message': event.message,
+        if (event.title != null) 'title': event.title,
+        if (event.code != null) 'code': event.code,
+      },
+    );
   }
 
   bool _isStaleClientNotice(NoticeEvent event) {
@@ -1257,9 +1444,16 @@ class ChatKitController {
   }
 
   void _handleItemUpdated(String itemId, Map<String, Object?> update) {
-    final existing = _items[itemId];
-    if (existing != null) {
-      final updated = applyThreadItemUpdate(existing, update);
+    final type = update['type'] as String?;
+    if (type == 'widget.streaming_text.value_delta') {
+      _queueStreamingTextUpdate(itemId, update);
+      return;
+    }
+
+    final previous = _items[itemId];
+    final updated =
+        previous != null ? applyThreadItemUpdate(previous, update) : null;
+    if (updated != null) {
       _items[itemId] = updated;
     }
     _eventController.add(
@@ -1312,6 +1506,69 @@ class ChatKitController {
         ),
       );
       Zone.current.handleUncaughtError(error, stackTrace);
+    }
+  }
+
+  void _queueStreamingTextUpdate(String itemId, Map<String, Object?> update) {
+    final componentId = update['component_id'] as String?;
+    if (componentId == null) {
+      final previous = _items[itemId];
+      if (previous != null) {
+        final updated = applyThreadItemUpdate(previous, update);
+        _items[itemId] = updated;
+      }
+      _eventController.add(
+        ChatKitThreadEvent(
+          streamEvent: ThreadItemUpdatedEvent(
+            itemId: itemId,
+            update: update,
+          ),
+        ),
+      );
+      return;
+    }
+
+    final key = '$itemId::$componentId';
+    final buffer = _streamingTextBuffers.putIfAbsent(
+      key,
+      () => _StreamingTextBuffer(itemId: itemId, componentId: componentId),
+    );
+    buffer.append(update);
+    _streamingDeltaTimer ??= Timer(
+      const Duration(milliseconds: 16),
+      _flushStreamingTextUpdates,
+    );
+  }
+
+  void _flushStreamingTextUpdates() {
+    if (_streamingTextBuffers.isEmpty) {
+      _streamingDeltaTimer?.cancel();
+      _streamingDeltaTimer = null;
+      return;
+    }
+    final entries = List<_StreamingTextBuffer>.from(
+      _streamingTextBuffers.values,
+    );
+    _streamingTextBuffers.clear();
+    _streamingDeltaTimer?.cancel();
+    _streamingDeltaTimer = null;
+
+    for (final buffer in entries) {
+      final update = buffer.buildUpdate();
+      final itemId = buffer.itemId;
+      final previous = _items[itemId];
+      if (previous != null) {
+        final updated = applyThreadItemUpdate(previous, update);
+        _items[itemId] = updated;
+      }
+      _eventController.add(
+        ChatKitThreadEvent(
+          streamEvent: ThreadItemUpdatedEvent(
+            itemId: itemId,
+            update: update,
+          ),
+        ),
+      );
     }
   }
 
@@ -1387,13 +1644,11 @@ class ChatKitController {
         isFollowUp: isFollowUp,
       ),
     );
-    _eventController.add(
-      ChatKitLogEvent(
-        name: 'offline.queue',
-        data: const {
-          'message': 'Request queued due to connectivity issues.',
-        },
-      ),
+    _emitLog(
+      'offline.queue',
+      const {
+        'message': 'Request queued due to connectivity issues.',
+      },
     );
     _scheduleOfflineDrain();
   }
@@ -1407,6 +1662,10 @@ class ChatKitController {
       _offlineRetryTimer = null;
       if (_offlineQueue.isEmpty) {
         _offlineBackoff = const Duration(seconds: 2);
+        return;
+      }
+      if (!_isAppActive) {
+        _scheduleOfflineDrain(const Duration(seconds: 1));
         return;
       }
       if (_isStreaming) {
@@ -1523,4 +1782,41 @@ class _QueuedStreamingRequest {
   final String? pendingItemId;
   final bool isFollowUp;
   int attempts = 0;
+}
+
+class _StreamingTextBuffer {
+  _StreamingTextBuffer({
+    required this.itemId,
+    required this.componentId,
+  });
+
+  final String itemId;
+  final String componentId;
+  final StringBuffer _buffer = StringBuffer();
+  Map<String, Object?>? _lastUpdate;
+  bool? _done;
+
+  void append(Map<String, Object?> update) {
+    final delta = update['delta'] as String?;
+    if (delta != null && delta.isNotEmpty) {
+      _buffer.write(delta);
+    }
+    final done = update['done'];
+    if (done is bool) {
+      _done = done;
+    }
+    _lastUpdate = Map<String, Object?>.from(update);
+  }
+
+  Map<String, Object?> buildUpdate() {
+    final base = Map<String, Object?>.from(
+      _lastUpdate ?? const {'type': 'widget.streaming_text.value_delta'},
+    );
+    base['component_id'] = componentId;
+    base['delta'] = _buffer.toString();
+    if (_done != null) {
+      base['done'] = _done;
+    }
+    return base;
+  }
 }

@@ -1,6 +1,8 @@
 import 'package:chatkit_core/chatkit_core.dart';
 import 'package:chatkit_core/src/api/api_client.dart';
+import 'package:chatkit_core/src/utils/json.dart';
 import 'package:chatkit_flutter/chatkit_flutter.dart';
+import 'package:chatkit_flutter/src/widgets/widget_renderer.dart';
 import 'package:flutter/material.dart' hide Page;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -320,10 +322,7 @@ void main() {
       type: 'assistant_message',
       role: 'assistant',
       content: const [
-        {
-          'type': 'text',
-          'text': 'Shareable insight about training.'
-        },
+        {'type': 'text', 'text': 'Shareable insight about training.'},
       ],
     );
     controller.debugHandleStreamEvent(ThreadItemAddedEvent(item: item));
@@ -334,8 +333,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(
       events.any(
-        (event) =>
-            event is ChatKitShareEvent && event.itemId == item.id,
+        (event) => event is ChatKitShareEvent && event.itemId == item.id,
       ),
       isTrue,
     );
@@ -362,8 +360,111 @@ void main() {
     expect(find.text('Message copied to clipboard.'), findsOneWidget);
   });
 
-  testWidgets(
-      'attachment ingestion and retry update composer state', (tester) async {
+  testWidgets('Form submission nests payload keys', (tester) async {
+    final controller = _CapturingController();
+    final widgetJson = {
+      'type': 'form',
+      'onSubmitAction': {
+        'type': 'form.submit',
+        'label': 'Submit',
+      },
+      'children': [
+        {
+          'type': 'input',
+          'name': 'profile.name',
+          'label': 'Name',
+        },
+        {
+          'type': 'input',
+          'name': 'profile[address][city]',
+          'label': 'City',
+        },
+        {
+          'type': 'input',
+          'name': 'phones[0]',
+          'label': 'Primary Phone',
+        },
+        {
+          'type': 'checkbox',
+          'name': 'flags[marketing]',
+          'label': 'Marketing Opt-in',
+        },
+      ],
+    };
+
+    final item = ThreadItem(
+      id: 'item_form',
+      threadId: 'thread_form',
+      createdAt: DateTime(2024),
+      type: 'widget',
+      content: const [],
+      attachments: const <ChatKitAttachment>[],
+      metadata: const {},
+      raw: {'widget': widgetJson},
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ChatKitWidgetRenderer(
+              widgetJson: widgetJson,
+              controller: controller,
+              item: item,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final nameField = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.decoration?.labelText == 'Name',
+    );
+    final cityField = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.decoration?.labelText == 'City',
+    );
+    final phoneField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.labelText == 'Primary Phone',
+    );
+
+    await tester.enterText(nameField, 'Alice');
+    await tester.enterText(cityField, 'Paris');
+    await tester.enterText(phoneField, '+33123456789');
+
+    final marketingCheckbox =
+        find.widgetWithText(CheckboxListTile, 'Marketing Opt-in');
+    await tester.tap(marketingCheckbox);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Submit'));
+    await tester.pump();
+
+    final action = controller.lastAction;
+    expect(action, isNotNull);
+    final payload = castMap(action!['payload']);
+    final form = castMap(payload['form']);
+    final profile = castMap(form['profile']);
+    final address = castMap(profile['address']);
+    expect(profile['name'], 'Alice');
+    expect(address['city'], 'Paris');
+
+    final phones = (form['phones'] as List?)?.cast<Object?>() ?? const [];
+    expect(phones, equals(['+33123456789']));
+
+    final flags = castMap(form['flags']);
+    expect(flags['marketing'], isTrue);
+
+    final flat = castMap(payload['formFlat']);
+    expect(flat['profile.name'], 'Alice');
+    expect(flat['profile[address][city]'], 'Paris');
+
+    await controller.dispose();
+  });
+
+  testWidgets('attachment ingestion and retry update composer state',
+      (tester) async {
     final controller = _StubUploadController();
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -467,6 +568,28 @@ class _NoopApiClient extends ChatKitApiClient {
 
   @override
   Future<void> close() async {}
+}
+
+class _CapturingController extends ChatKitController {
+  _CapturingController()
+      : super(
+          const ChatKitOptions(
+            api: CustomApiConfig(url: 'https://example.com'),
+          ),
+          apiClient: _NoopApiClient(),
+        );
+
+  Map<String, Object?>? lastAction;
+  String? lastItemId;
+
+  @override
+  Future<void> sendCustomAction(
+    Map<String, Object?> action, {
+    String? itemId,
+  }) async {
+    lastAction = action;
+    lastItemId = itemId;
+  }
 }
 
 class _FakeChatKitController extends ChatKitController {

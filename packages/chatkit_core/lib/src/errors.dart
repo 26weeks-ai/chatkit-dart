@@ -6,7 +6,8 @@ class ChatKitException implements Exception {
   final Object? cause;
 
   @override
-  String toString() => 'ChatKitException($message${cause != null ? ', cause: $cause' : ''})';
+  String toString() =>
+      'ChatKitException($message${cause != null ? ', cause: $cause' : ''})';
 }
 
 /// Thrown when the server responds with an error payload.
@@ -27,8 +28,12 @@ class ChatKitStreamingInProgressException extends ChatKitException {
   ChatKitStreamingInProgressException(String message) : super(message);
 }
 
+/// Raised when an operation is attempted while another conflicting action is running.
+class ChatKitBusyException extends ChatKitException {
+  ChatKitBusyException(String message) : super(message);
+}
+
 /// Raised when the API configuration is invalid.
 class ChatKitConfigurationException extends ChatKitException {
   ChatKitConfigurationException(String message) : super(message);
 }
-

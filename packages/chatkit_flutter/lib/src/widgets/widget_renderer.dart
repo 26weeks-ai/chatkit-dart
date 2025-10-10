@@ -5451,6 +5451,161 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     _formState[name] = value;
   }
 
+  Map<String, Object?> _buildFormPayload() {
+    final result = <String, Object?>{};
+    for (final entry in _formState.entries) {
+      if (entry.key.isEmpty) continue;
+      _applyFormValue(result, entry.key, entry.value);
+    }
+    return result;
+  }
+
+  void _applyFormValue(
+    Map<String, Object?> target,
+    String key,
+    Object? value,
+  ) {
+    final path = _parseFormFieldPath(key);
+    if (path.isEmpty) {
+      target[key] = value;
+      return;
+    }
+    _assignFormValue(target, path, 0, value);
+  }
+
+  void _assignFormValue(
+    Object? container,
+    List<_FormFieldPathSegment> path,
+    int index,
+    Object? value,
+  ) {
+    if (index >= path.length) {
+      return;
+    }
+    final segment = path[index];
+    final isLast = index == path.length - 1;
+    final _FormFieldPathSegment? nextSegment = isLast ? null : path[index + 1];
+
+    if (container is Map<String, Object?>) {
+      if (!segment.isProperty) {
+        return;
+      }
+      final key = segment.key!;
+      if (isLast) {
+        container[key] = value;
+        return;
+      }
+      final wantsList = nextSegment?.isList ?? false;
+      final existing = container[key];
+      if (wantsList) {
+        var list = existing is List<Object?> ? existing : <Object?>[];
+        container[key] = list;
+        _assignFormValue(list, path, index + 1, value);
+      } else {
+        var map =
+            existing is Map<String, Object?> ? existing : <String, Object?>{};
+        container[key] = map;
+        _assignFormValue(map, path, index + 1, value);
+      }
+      return;
+    }
+
+    if (container is List<Object?>) {
+      if (!segment.isList) {
+        return;
+      }
+
+      if (segment.isAppend) {
+        if (isLast) {
+          container.add(value);
+          return;
+        }
+        final wantsList = nextSegment?.isList ?? false;
+        final newContainer = wantsList ? <Object?>[] : <String, Object?>{};
+        container.add(newContainer);
+        _assignFormValue(newContainer, path, index + 1, value);
+        return;
+      }
+
+      final targetIndex = segment.index!;
+      while (container.length <= targetIndex) {
+        container.add(null);
+      }
+      if (isLast) {
+        container[targetIndex] = value;
+        return;
+      }
+      final wantsList = nextSegment?.isList ?? false;
+      var nextContainer = container[targetIndex];
+      if (wantsList) {
+        if (nextContainer is! List<Object?>) {
+          nextContainer = <Object?>[];
+          container[targetIndex] = nextContainer;
+        }
+      } else {
+        if (nextContainer is! Map<String, Object?>) {
+          nextContainer = <String, Object?>{};
+          container[targetIndex] = nextContainer;
+        }
+      }
+      _assignFormValue(nextContainer, path, index + 1, value);
+    }
+  }
+
+  List<_FormFieldPathSegment> _parseFormFieldPath(String key) {
+    if (key.isEmpty) {
+      return const <_FormFieldPathSegment>[];
+    }
+    final segments = <_FormFieldPathSegment>[];
+    final buffer = StringBuffer();
+    var index = 0;
+    while (index < key.length) {
+      final char = key[index];
+      if (char == '.') {
+        if (buffer.isNotEmpty) {
+          segments.add(
+            _FormFieldPathSegment.property(buffer.toString()),
+          );
+          buffer.clear();
+        }
+        index += 1;
+        continue;
+      }
+      if (char == '[') {
+        if (buffer.isNotEmpty) {
+          segments.add(
+            _FormFieldPathSegment.property(buffer.toString()),
+          );
+          buffer.clear();
+        }
+        final close = key.indexOf(']', index + 1);
+        if (close == -1) {
+          buffer.write(key.substring(index));
+          break;
+        }
+        final inside = key.substring(index + 1, close);
+        if (inside.isEmpty) {
+          segments.add(const _FormFieldPathSegment.append());
+        } else {
+          final numeric = int.tryParse(inside);
+          if (numeric != null) {
+            segments.add(_FormFieldPathSegment.index(numeric));
+          } else {
+            segments.add(_FormFieldPathSegment.property(inside));
+          }
+        }
+        index = close + 1;
+        continue;
+      }
+      buffer.write(char);
+      index += 1;
+    }
+    if (buffer.isNotEmpty) {
+      segments.add(_FormFieldPathSegment.property(buffer.toString()));
+    }
+    return segments;
+  }
+
   void _handleFieldInteraction(
     String name, {
     bool markTouched = false,
@@ -5819,11 +5974,13 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       return;
     }
 
+    final formPayload = _buildFormPayload();
     await _dispatchAction(
       action,
       context,
       payloadOverride: {
-        'form': Map<String, Object?>.from(_formState),
+        'form': formPayload,
+        'formFlat': Map<String, Object?>.from(_formState),
       },
       preference: _ActionLoadingPreference.auto,
       actionSource: action,
@@ -5845,7 +6002,16 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       payload.addAll(payloadOverride);
     }
     if (includeFormState) {
-      payload['form'] = Map<String, Object?>.from(_formState);
+      Map<String, Object?>? cachedFormPayload;
+      Map<String, Object?> ensureFormPayload() {
+        return cachedFormPayload ??= _buildFormPayload();
+      }
+
+      payload.putIfAbsent('form', ensureFormPayload);
+      payload.putIfAbsent(
+        'formFlat',
+        () => Map<String, Object?>.from(_formState),
+      );
     }
 
     final includePayload =
@@ -6235,6 +6401,28 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     }
     return {};
   }
+}
+
+class _FormFieldPathSegment {
+  const _FormFieldPathSegment.property(this.key)
+      : index = null,
+        isAppend = false;
+
+  const _FormFieldPathSegment.index(this.index)
+      : key = null,
+        isAppend = false;
+
+  const _FormFieldPathSegment.append()
+      : key = null,
+        index = null,
+        isAppend = true;
+
+  final String? key;
+  final int? index;
+  final bool isAppend;
+
+  bool get isProperty => key != null;
+  bool get isList => index != null || isAppend;
 }
 
 enum _TimelineAlignment { start, end, alternate }

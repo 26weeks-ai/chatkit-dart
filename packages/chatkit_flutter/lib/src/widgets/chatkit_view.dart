@@ -29,7 +29,7 @@ class ChatKitView extends StatefulWidget {
   State<ChatKitView> createState() => _ChatKitViewState();
 }
 
-class _ChatKitViewState extends State<ChatKitView> {
+class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   late final TextEditingController _composerController;
   late final FocusNode _composerFocusNode;
@@ -83,6 +83,7 @@ class _ChatKitViewState extends State<ChatKitView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final composer = controller.composerState;
     _composerController = TextEditingController(text: composer.text);
     _historySearchController = TextEditingController(text: _historySearchQuery);
@@ -118,6 +119,7 @@ class _ChatKitViewState extends State<ChatKitView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
     _tagSearchDebounce?.cancel();
     _historySearchDebounce?.cancel();
@@ -134,6 +136,34 @@ class _ChatKitViewState extends State<ChatKitView> {
     _scrollController.dispose();
     _historyScrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!_composerFocusNode.hasFocus) {
+      return;
+    }
+    _ensureComposerVisible();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        controller.handleAppForegrounded();
+        _ensureComposerVisible();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        controller.handleAppBackgrounded();
+        break;
+      case AppLifecycleState.detached:
+        controller.handleAppBackgrounded();
+        break;
+    }
   }
 
   bool get _historyEnabled => controller.options.history?.enabled ?? false;
@@ -250,12 +280,12 @@ class _ChatKitViewState extends State<ChatKitView> {
           break;
         case ChatKitErrorEvent(:final error):
           if (error != null && context.mounted) {
-          final messenger = ScaffoldMessenger.maybeOf(context);
-          if (!_suppressSnackbars && messenger != null) {
-            messenger.showSnackBar(
-              SnackBar(content: Text(error)),
-            );
-          }
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            if (!_suppressSnackbars && messenger != null) {
+              messenger.showSnackBar(
+                SnackBar(content: Text(error)),
+              );
+            }
           }
           break;
         case ChatKitLogEvent():
@@ -375,7 +405,9 @@ class _ChatKitViewState extends State<ChatKitView> {
   void _handleComposerFocusChange() {
     if (!_composerFocusNode.hasFocus) {
       _hideTagSuggestions();
+      return;
     }
+    _ensureComposerVisible();
   }
 
   KeyEventResult _handleComposerKeyEvent(FocusNode node, KeyEvent event) {
@@ -542,6 +574,29 @@ class _ChatKitViewState extends State<ChatKitView> {
     final target = atEnd ? text.length : 0;
     final safeOffset = target.clamp(0, text.length).toInt();
     _composerController.selection = TextSelection.collapsed(offset: safeOffset);
+    _ensureComposerVisible();
+  }
+
+  void _ensureComposerVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_scrollController.hasClients) return;
+      final mediaQuery = MediaQuery.maybeOf(context);
+      if (mediaQuery == null) return;
+      final bottomInset = mediaQuery.viewInsets.bottom;
+      if (bottomInset <= 0 && !_composerFocusNode.hasFocus) {
+        return;
+      }
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      if ((maxExtent - _scrollController.offset).abs() < 4) {
+        return;
+      }
+      _scrollController.animateTo(
+        maxExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   void _applyTagSuggestion(Entity entity) {
@@ -1735,8 +1790,8 @@ class _ChatKitViewState extends State<ChatKitView> {
                                     final entity = results[index];
                                     final selected = highlightedIndex == index;
                                     final badge = buildBadge(entity, theme);
-                                    final description = entity.data['description']
-                                        as String?;
+                                    final description =
+                                        entity.data['description'] as String?;
                                     return MouseRegion(
                                       onEnter: (_) {
                                         setModalState(() {
@@ -3918,17 +3973,17 @@ class _StartScreen extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                for (final prompt in prompts)
-                  ActionChip(
-                    label: Text(prompt.label),
-                    avatar: prompt.icon == null
-                        ? null
-                        : Icon(
-                            _promptIconData(prompt.icon!),
-                            size: 18,
-                          ),
-                    onPressed: () => _insertPrompt(context, prompt),
-                  ),
+                    for (final prompt in prompts)
+                      ActionChip(
+                        label: Text(prompt.label),
+                        avatar: prompt.icon == null
+                            ? null
+                            : Icon(
+                                _promptIconData(prompt.icon!),
+                                size: 18,
+                              ),
+                        onPressed: () => _insertPrompt(context, prompt),
+                      ),
                   ],
                 ),
               ),
@@ -4470,19 +4525,19 @@ class _Composer extends StatelessWidget {
                 for (final tool in pinnedTools)
                   FilterChip(
                     label: Text(tool.shortLabel ?? tool.label),
-                          avatar: _iconForTool(tool.icon),
-                          selected: selectedToolId == tool.id,
-                          onSelected: disabled
-                              ? null
-                              : (value) {
-                                  if (onToolChanged == null) return;
-                                  if (value) {
-                                    onToolChanged!(tool.id);
-                                  } else {
-                                    onToolChanged!(null);
-                                  }
-                                },
-                      ),
+                    avatar: _iconForTool(tool.icon),
+                    selected: selectedToolId == tool.id,
+                    onSelected: disabled
+                        ? null
+                        : (value) {
+                            if (onToolChanged == null) return;
+                            if (value) {
+                              onToolChanged!(tool.id);
+                            } else {
+                              onToolChanged!(null);
+                            }
+                          },
+                  ),
               ],
             ),
           ),
