@@ -20,9 +20,7 @@ class Entity {
 
   factory Entity.fromJson(Map<String, Object?> json) => Entity(
         id: json['id'] as String,
-        title: (json['title'] as String?) ??
-            (json['label'] as String?) ??
-            '',
+        title: (json['title'] as String?) ?? (json['label'] as String?) ?? '',
         icon: json['icon'] as String?,
         interactive: json['interactive'] as bool?,
         group: json['group'] as String?,

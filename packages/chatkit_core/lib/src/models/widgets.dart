@@ -79,4 +79,3 @@ class WidgetComponent {
           'children': children.map((child) => child.toJson()).toList(),
       };
 }
-

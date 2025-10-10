@@ -35,4 +35,3 @@ class Page<T> {
         if (after != null) 'after': after,
       };
 }
-

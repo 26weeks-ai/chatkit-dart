@@ -22,10 +22,7 @@ Map<String, Object?> castMap(Object? value) {
 
 List<Map<String, Object?>> castListOfMaps(Object? value) {
   if (value is List) {
-    return value
-        .map((entry) => castMap(entry))
-        .toList(growable: false);
+    return value.map((entry) => castMap(entry)).toList(growable: false);
   }
   return const [];
 }
-

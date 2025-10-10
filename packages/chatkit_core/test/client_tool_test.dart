@@ -61,7 +61,8 @@ class _ClientToolApiClient extends ChatKitApiClient {
 }
 
 void main() {
-  test('client tool invocation dispatches handler and submits result', () async {
+  test('client tool invocation dispatches handler and submits result',
+      () async {
     Map<String, Object?>? submittedPayload;
     String? submittedThreadId;
     final apiClient = _ClientToolApiClient(

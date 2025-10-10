@@ -50,8 +50,7 @@ void main() {
         .toList();
     expect(annotationIds, contains('file_weekly_plan'));
 
-    final widgetJson =
-        (assistant.raw['widget'] as Map).cast<String, Object?>();
+    final widgetJson = (assistant.raw['widget'] as Map).cast<String, Object?>();
     final children = (widgetJson['children'] as List)
         .map((child) => (child as Map).cast<String, Object?>())
         .toList();

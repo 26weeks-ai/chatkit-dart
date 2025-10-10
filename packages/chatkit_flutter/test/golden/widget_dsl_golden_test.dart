@@ -350,7 +350,8 @@ final Map<String, Object?> _insightsWidget = <String, Object?>{
               'children': <Map<String, Object?>>[
                 {
                   'type': 'text',
-                  'value': 'Focus on Z2 mileage, mobility drills, and posterior-chain strength.',
+                  'value':
+                      'Focus on Z2 mileage, mobility drills, and posterior-chain strength.',
                   'size': 'sm',
                 },
               ],
@@ -391,7 +392,8 @@ final Map<String, Object?> _insightsWidget = <String, Object?>{
               'children': <Map<String, Object?>>[
                 {
                   'type': 'text',
-                  'value': 'Negative split the final 20 minutes and practice race-day fueling.',
+                  'value':
+                      'Negative split the final 20 minutes and practice race-day fueling.',
                   'size': 'sm',
                 },
               ],
@@ -824,8 +826,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final state =
-        tester.state(find.byType(ChatKitWidgetRenderer)) as dynamic;
+    final state = tester.state(find.byType(ChatKitWidgetRenderer)) as dynamic;
     state.debugRequestFocusForCarousel('progress_carousel');
     await tester.pump();
 

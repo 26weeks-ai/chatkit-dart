@@ -58,8 +58,7 @@ class _CoachDemoScreenState extends State<CoachDemoScreen> {
         prompts: [
           const StartScreenPrompt(
             label: 'Plan a workout',
-            prompt:
-                'Create a 30 minute HIIT session using body weight only.',
+            prompt: 'Create a 30 minute HIIT session using body weight only.',
             icon: 'sparkle',
           ),
           const StartScreenPrompt(
