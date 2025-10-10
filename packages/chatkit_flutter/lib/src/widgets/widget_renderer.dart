@@ -161,6 +161,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       case 'transition':
         return _buildTransition(component, context);
       case 'text':
+      case 'caption':
+      case 'label':
+      case 'title':
         return _buildText(component, context);
       case 'markdown':
         return _buildMarkdown(component, context);
@@ -175,6 +178,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       case 'listview':
         return _buildList(component, context);
       case 'list.item':
+      case 'listviewitem':
         return _buildListItem(component, context);
       case 'form':
         return _buildForm(component, context);
@@ -188,7 +192,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       case 'checkbox.group':
       case 'toggle':
       case 'radio.group':
+      case 'radiogroup':
       case 'date.picker':
+      case 'datepicker':
       case 'chips':
         return _buildFormControl(component, context);
       case 'timeline':
