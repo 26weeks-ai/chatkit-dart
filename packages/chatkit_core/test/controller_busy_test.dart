@@ -70,6 +70,27 @@ void main() {
       await controller.dispose();
     });
 
+    test('composer state clears immediately after sendUserMessage', () async {
+      final apiClient = _BlockingApiClient();
+      final controller = ChatKitController(
+        ChatKitOptions(
+          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        ),
+        apiClient: apiClient,
+      );
+
+      final sendFuture = controller.sendUserMessage(text: 'clear me');
+      await apiClient.started.future;
+
+      expect(controller.composerState.text, isEmpty);
+      expect(controller.composerState.attachments, isEmpty);
+      expect(controller.composerState.tags, isEmpty);
+
+      apiClient.complete();
+      await sendFuture;
+      await controller.dispose();
+    });
+
     test('backgrounding prevents new streaming requests', () async {
       final controller = ChatKitController(
         ChatKitOptions(
