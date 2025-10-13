@@ -343,7 +343,6 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
         _scheduleScrollToBottom();
         break;
       case ThreadItemAddedEvent(:final item):
-        _removePendingPlaceholderFor(item);
         _upsertItem(item);
         _scheduleScrollToBottom();
         break;
@@ -401,75 +400,6 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
   void _handleComposerChanged(String value) {
     controller.setComposerValue(text: value, tags: _selectedTags);
     _updateTagAutocomplete();
-  }
-
-  void _removePendingPlaceholderFor(ThreadItem item) {
-    if (item.metadata['pending'] == true || !_isUserAuthoredItem(item)) {
-      return;
-    }
-    final pendingIndex = _pendingPlaceholderIndex(item);
-    if (pendingIndex != null) {
-      final updated = [..._items]..removeAt(pendingIndex);
-      _items = updated;
-      return;
-    }
-    final fallbackIndex = _items.indexWhere(
-      (entry) =>
-          entry.metadata['pending'] == true &&
-          entry.threadId == item.threadId,
-    );
-    if (fallbackIndex != -1) {
-      final updated = [..._items]..removeAt(fallbackIndex);
-      _items = updated;
-    }
-  }
-
-  int? _pendingPlaceholderIndex(ThreadItem item) {
-    if (_items.isEmpty) {
-      return null;
-    }
-    const equality = DeepCollectionEquality();
-    final attachmentSignature = _attachmentSignature(item);
-    for (var index = 0; index < _items.length; index++) {
-      final candidate = _items[index];
-      if (candidate.metadata['pending'] == true &&
-          candidate.threadId == item.threadId &&
-          equality.equals(candidate.content, item.content) &&
-          equality.equals(
-            _attachmentSignature(candidate),
-            attachmentSignature,
-          )) {
-        return index;
-      }
-    }
-    return null;
-  }
-
-  List<Map<String, Object?>> _attachmentSignature(ThreadItem item) {
-    if (item.attachments.isEmpty) {
-      return const [];
-    }
-    return item.attachments
-        .map((attachment) => attachment.toJson())
-        .toList(growable: false);
-  }
-
-  bool _isUserAuthoredItem(ThreadItem item) {
-    final type = item.type.toLowerCase();
-    if (type == 'user_message') {
-      return true;
-    }
-    final role = item.role?.toLowerCase();
-    if (role == 'user') {
-      return true;
-    }
-    for (final entry in item.content) {
-      final contentType = (entry['type'] as String?)?.toLowerCase();
-      if (contentType != null && contentType.startsWith('input_')) {
-        return true;
-      }
-    }
-    return false;
   }
 
   void _handleComposerFocusChange() {
@@ -2077,38 +2007,16 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
     if (text.isEmpty && _attachments.isEmpty) {
       return;
     }
-    final previousText = _composerController.text;
-    final previousSelection = _composerController.selection;
-    final previousAttachments = _attachments;
-    final previousTags = _selectedTags;
-    final attachmentPayloads =
-        _attachments.map((a) => a.toJson()).toList(growable: false);
-
-    _composerController.clear();
-    setState(() {
-      _attachments = const [];
-      _selectedTags = const [];
-    });
     try {
       await controller.sendUserMessage(
         text: text,
-        attachments: attachmentPayloads,
-        tags: previousTags,
+        attachments: _attachments.map((a) => a.toJson()).toList(),
+        tags: _selectedTags,
       );
+      _attachments = const [];
+      _selectedTags = const [];
+      _syncComposerState();
     } catch (error) {
-      if (!mounted) return;
-      _composerController
-        ..text = previousText
-        ..selection = previousSelection;
-      setState(() {
-        _attachments = previousAttachments;
-        _selectedTags = previousTags;
-      });
-      controller.setComposerValue(
-        text: previousText,
-        attachments: previousAttachments.map((a) => a.toJson()).toList(),
-        tags: previousTags,
-      );
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       if (!_suppressSnackbars && messenger != null) {

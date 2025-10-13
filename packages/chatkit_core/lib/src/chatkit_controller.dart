@@ -1400,9 +1400,21 @@ class ChatKitController {
   }
 
   void _handleItemAdded(ThreadItem item) {
-    if (_shouldResolvePendingFor(item)) {
-      _resolvePendingUserMessage(item);
+    if (item.type == 'user_message' && _pendingUserMessages.isNotEmpty) {
+      final pendingId = _pendingUserMessages.removeFirst();
+      final pendingItem = _items[pendingId];
+      if (pendingItem != null && pendingItem.threadId == item.threadId) {
+        _items.remove(pendingId);
+        _eventController.add(
+          ChatKitThreadEvent(
+            streamEvent: ThreadItemRemovedEvent(itemId: pendingId),
+          ),
+        );
+      } else {
+        _pendingUserMessages.addFirst(pendingId);
+      }
     }
+
     _items[item.id] = item;
     _eventController
         .add(ChatKitThreadEvent(streamEvent: ThreadItemAddedEvent(item: item)));
@@ -1415,103 +1427,6 @@ class ChatKitController {
         ),
       );
     }
-  }
-
-  bool _shouldResolvePendingFor(ThreadItem item) {
-    if (item.metadata['pending'] == true) {
-      return false;
-    }
-    return _isUserAuthoredItem(item);
-  }
-
-  void _resolvePendingUserMessage(ThreadItem item) {
-    final matchingId = _matchingPendingId(item);
-    if (matchingId != null) {
-      _removePendingPlaceholder(matchingId);
-      return;
-    }
-    final fallbackId = _oldestPendingIdForThread(item.threadId);
-    if (fallbackId != null) {
-      _removePendingPlaceholder(fallbackId);
-    }
-  }
-
-  bool _isUserAuthoredItem(ThreadItem item) {
-    final type = item.type.toLowerCase();
-    if (type == 'user_message') {
-      return true;
-    }
-    final role = item.role?.toLowerCase();
-    if (role == 'user') {
-      return true;
-    }
-    for (final entry in item.content) {
-      final contentType = (entry['type'] as String?)?.toLowerCase();
-      if (contentType != null && contentType.startsWith('input_')) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  String? _matchingPendingId(ThreadItem item) {
-    if (_pendingUserMessages.isEmpty && _items.isEmpty) {
-      return null;
-    }
-    final attachmentSignature = _attachmentSignature(item);
-    const contentEquality = DeepCollectionEquality();
-    const attachmentEquality = DeepCollectionEquality();
-
-    for (final pendingId in _pendingUserMessages.toList()) {
-      final pendingItem = _items[pendingId];
-      if (pendingItem == null) {
-        continue;
-      }
-      if (pendingItem.metadata['pending'] == true &&
-          pendingItem.threadId == item.threadId &&
-          contentEquality.equals(pendingItem.content, item.content) &&
-          attachmentEquality.equals(
-            _attachmentSignature(pendingItem),
-            attachmentSignature,
-          )) {
-        return pendingId;
-      }
-    }
-
-    for (final entry in _items.entries) {
-      final pendingItem = entry.value;
-      if (pendingItem.metadata['pending'] == true &&
-          pendingItem.threadId == item.threadId &&
-          contentEquality.equals(pendingItem.content, item.content) &&
-          attachmentEquality.equals(
-            _attachmentSignature(pendingItem),
-            attachmentSignature,
-          )) {
-        return entry.key;
-      }
-    }
-    return null;
-  }
-
-  String? _oldestPendingIdForThread(String threadId) {
-    ThreadItem? candidate;
-    for (final item in _items.values) {
-      if (item.metadata['pending'] == true && item.threadId == threadId) {
-        if (candidate == null || item.createdAt.isBefore(candidate.createdAt)) {
-          candidate = item;
-        }
-      }
-    }
-    return candidate?.id;
-  }
-
-  List<Map<String, Object?>> _attachmentSignature(ThreadItem item) {
-    if (item.attachments.isEmpty) {
-      return const [];
-    }
-    return item.attachments
-        .map((attachment) => attachment.toJson())
-        .toList(growable: false);
   }
 
   Future<void> _handleItemDone(ThreadItem item) async {
