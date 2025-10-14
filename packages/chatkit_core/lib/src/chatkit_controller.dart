@@ -122,11 +122,9 @@ class ChatKitController {
         'transport.cancelled',
         const {'reason': 'background'},
       );
-      _apiClient.cancelActiveStream();
       _isStreaming = false;
-    } else {
-      _apiClient.cancelActiveStream();
     }
+    _apiClient.cancelActiveStream();
     _emitLog(
       'app.lifecycle',
       const {'state': 'background'},
@@ -295,12 +293,6 @@ class ChatKitController {
       }
       rethrow;
     }
-    await setComposerValue(
-      text: '',
-      reply: null,
-      attachments: const [],
-      tags: const <Entity>[],
-    );
   }
 
   Future<void> setComposerValue({
@@ -423,18 +415,7 @@ class ChatKitController {
         ThreadMetadata.fromJson,
       );
     } on ChatKitServerException catch (error) {
-      if (error.statusCode == 401) {
-        _eventController.add(const ChatKitAuthExpiredEvent());
-        _setComposerAvailability(
-          available: false,
-          reason: 'auth',
-          message: 'Authentication expired.',
-        );
-      } else if (error.statusCode == 429) {
-        _handleRateLimit(error);
-      } else if (_isStaleClientError(error)) {
-        _handleStaleClientError(error);
-      }
+      _handleCommonServerError(error);
       rethrow;
     }
   }
@@ -443,18 +424,7 @@ class ChatKitController {
     try {
       await _apiClient.send(threadsDelete(threadId: threadId));
     } on ChatKitServerException catch (error) {
-      if (error.statusCode == 401) {
-        _eventController.add(const ChatKitAuthExpiredEvent());
-        _setComposerAvailability(
-          available: false,
-          reason: 'auth',
-          message: 'Authentication expired.',
-        );
-      } else if (error.statusCode == 429) {
-        _handleRateLimit(error);
-      } else if (_isStaleClientError(error)) {
-        _handleStaleClientError(error);
-      }
+      _handleCommonServerError(error);
       rethrow;
     }
     if (_currentThreadId == threadId) {
@@ -480,18 +450,7 @@ class ChatKitController {
         );
       }
     } on ChatKitServerException catch (error) {
-      if (error.statusCode == 401) {
-        _eventController.add(const ChatKitAuthExpiredEvent());
-        _setComposerAvailability(
-          available: false,
-          reason: 'auth',
-          message: 'Authentication expired.',
-        );
-      } else if (error.statusCode == 429) {
-        _handleRateLimit(error);
-      } else if (_isStaleClientError(error)) {
-        _handleStaleClientError(error);
-      }
+      _handleCommonServerError(error);
       rethrow;
     }
   }
@@ -506,18 +465,7 @@ class ChatKitController {
         itemsFeedback(threadId: threadId, itemIds: itemIds, kind: kind),
       );
     } on ChatKitServerException catch (error) {
-      if (error.statusCode == 401) {
-        _eventController.add(const ChatKitAuthExpiredEvent());
-        _setComposerAvailability(
-          available: false,
-          reason: 'auth',
-          message: 'Authentication expired.',
-        );
-      } else if (error.statusCode == 429) {
-        _handleRateLimit(error);
-      } else if (_isStaleClientError(error)) {
-        _handleStaleClientError(error);
-      }
+      _handleCommonServerError(error);
       rethrow;
     }
   }
@@ -626,18 +574,7 @@ class ChatKitController {
             ),
           );
         } on ChatKitServerException catch (error) {
-          if (error.statusCode == 401) {
-            _eventController.add(const ChatKitAuthExpiredEvent());
-            _setComposerAvailability(
-              available: false,
-              reason: 'auth',
-              message: 'Authentication expired.',
-            );
-          } else if (error.statusCode == 429) {
-            _handleRateLimit(error);
-          } else if (_isStaleClientError(error)) {
-            _handleStaleClientError(error);
-          }
+          _handleCommonServerError(error);
           rethrow;
         }
 
@@ -805,18 +742,7 @@ class ChatKitController {
           },
           onError: (error, stackTrace) {
             if (error is ChatKitServerException) {
-              if (error.statusCode == 401) {
-                _eventController.add(const ChatKitAuthExpiredEvent());
-                _setComposerAvailability(
-                  available: false,
-                  reason: 'auth',
-                  message: 'Authentication expired.',
-                );
-              } else if (error.statusCode == 429) {
-                _handleRateLimit(error);
-              } else if (_isStaleClientError(error)) {
-                _handleStaleClientError(error);
-              }
+              _handleCommonServerError(error);
             }
             final message = error.toString();
             _eventController.add(
@@ -855,18 +781,7 @@ class ChatKitController {
         capturedError = error;
         capturedStack = stackTrace;
         if (error is ChatKitServerException) {
-          if (error.statusCode == 401) {
-            _eventController.add(const ChatKitAuthExpiredEvent());
-            _setComposerAvailability(
-              available: false,
-              reason: 'auth',
-              message: 'Authentication expired.',
-            );
-          } else if (error.statusCode == 429) {
-            _handleRateLimit(error);
-          } else if (_isStaleClientError(error)) {
-            _handleStaleClientError(error);
-          }
+          _handleCommonServerError(error);
         }
         if (!completer.isCompleted) {
           completer.completeError(error, stackTrace);
@@ -956,6 +871,26 @@ class ChatKitController {
     return false;
   }
 
+  void _handleCommonServerError(ChatKitServerException error) {
+    final status = error.statusCode;
+    if (status == 401) {
+      _eventController.add(const ChatKitAuthExpiredEvent());
+      _setComposerAvailability(
+        available: false,
+        reason: 'auth',
+        message: 'Authentication expired.',
+      );
+      return;
+    }
+    if (status == 429) {
+      _handleRateLimit(error);
+      return;
+    }
+    if (_isStaleClientError(error)) {
+      _handleStaleClientError(error);
+    }
+  }
+
   String? _quotedTextForItem(String itemId) {
     final item = _items[itemId];
     if (item == null) {
@@ -1026,12 +961,9 @@ class ChatKitController {
           reason: previousReason,
         ),
       );
-      if (!previousAvailable) {
-        if (previousReason == 'auth') {
-          _options.hostedHooks?.onAuthRestored?.call();
-        } else if (previousReason == 'stale_client') {
-          _options.hostedHooks?.onAuthRestored?.call();
-        }
+      if (!previousAvailable &&
+          (previousReason == 'auth' || previousReason == 'stale_client')) {
+        _options.hostedHooks?.onAuthRestored?.call();
       }
       return;
     }
