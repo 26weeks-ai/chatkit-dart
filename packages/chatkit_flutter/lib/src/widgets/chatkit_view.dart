@@ -266,7 +266,12 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
             _composerController.clear();
             _attachments = const [];
           }
-          _scheduleScrollToBottom();
+          _scheduleScrollToBottom(retries: 3);
+          break;
+        case ChatKitThreadLoadEndEvent(:final threadId):
+          if (threadId == controller.currentThreadId) {
+            _scheduleScrollToBottom(retries: 3);
+          }
           break;
         case ChatKitThreadEvent(:final streamEvent):
           _handleThreadEvent(streamEvent);
@@ -2602,25 +2607,65 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
     });
   }
 
-  void _scheduleScrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final position = _scrollController.position;
-      final maxExtent = position.maxScrollExtent;
-      final delta = maxExtent - position.pixels;
-      if (delta.abs() < 4) {
+  void _scheduleScrollToBottom({int retries = 1}) {
+    if (!mounted) {
+      return;
+    }
+
+    void attempt(int remaining) {
+      if (remaining <= 0 || !mounted) {
         return;
       }
-      if (delta > 512) {
-        _scrollController.jumpTo(maxExtent);
-        return;
-      }
-      _scrollController.animateTo(
-        maxExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
-    });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (!_scrollController.hasClients) {
+          attempt(remaining - 1);
+          return;
+        }
+        final position = _scrollController.position;
+        if (!position.hasPixels) {
+          attempt(remaining - 1);
+          return;
+        }
+        final maxExtent = position.maxScrollExtent;
+        final delta = maxExtent - position.pixels;
+        if (delta.abs() < 4) {
+          if (remaining > 1) {
+            attempt(remaining - 1);
+          }
+          return;
+        }
+        try {
+          if (delta > 512) {
+            _scrollController.jumpTo(maxExtent);
+            if (remaining > 1) {
+              attempt(remaining - 1);
+            }
+          } else {
+            final future = _scrollController.animateTo(
+              maxExtent,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+            );
+            if (remaining > 1) {
+              future.catchError((_) {}).whenComplete(() {
+                if (mounted) {
+                  attempt(remaining - 1);
+                }
+              });
+            }
+          }
+        } on Exception {
+          if (remaining > 1) {
+            attempt(remaining - 1);
+          }
+        }
+      });
+    }
+
+    attempt(math.max(1, retries));
   }
 
   Widget _wrapWithChatKitTheme(BuildContext context, Widget child) {
