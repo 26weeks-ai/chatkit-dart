@@ -348,12 +348,10 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
         _scheduleScrollToBottom();
         break;
       case ThreadItemAddedEvent(:final item):
-        _removePendingPlaceholderFor(item);
         _upsertItem(item);
         _scheduleScrollToBottom();
         break;
       case ThreadItemDoneEvent(:final item):
-        _removePendingPlaceholderFor(item);
         _upsertItem(item);
         _scheduleScrollToBottom();
         break;
@@ -407,97 +405,6 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
   void _handleComposerChanged(String value) {
     controller.setComposerValue(text: value, tags: _selectedTags);
     _updateTagAutocomplete();
-  }
-
-  void _removePendingPlaceholderFor(ThreadItem item) {
-    if (item.metadata['pending'] == true || !_isUserAuthoredItem(item)) {
-      return;
-    }
-    final pendingIndex = _pendingPlaceholderIndex(item);
-    if (pendingIndex != null) {
-      final updated = [..._items]..removeAt(pendingIndex);
-      _items = updated;
-      return;
-    }
-    final fallbackIndex = _items.indexWhere(
-      (entry) =>
-          entry.metadata['pending'] == true && entry.threadId == item.threadId,
-    );
-    if (fallbackIndex != -1) {
-      final updated = [..._items]..removeAt(fallbackIndex);
-      _items = updated;
-    }
-  }
-
-  int? _pendingPlaceholderIndex(ThreadItem item) {
-    if (_items.isEmpty) {
-      return null;
-    }
-    const equality = DeepCollectionEquality();
-    final attachmentSignature = _attachmentSignature(item);
-    final normalizedText = _normalizedUserText(item);
-    for (var index = 0; index < _items.length; index++) {
-      final candidate = _items[index];
-      if (candidate.metadata['pending'] == true &&
-          candidate.threadId == item.threadId &&
-          (equality.equals(candidate.content, item.content) ||
-              (_normalizedUserText(candidate) == normalizedText &&
-                  _createdCloseTo(candidate, item))) &&
-          equality.equals(
-            _attachmentSignature(candidate),
-            attachmentSignature,
-          )) {
-        return index;
-      }
-    }
-    return null;
-  }
-
-  List<Map<String, Object?>> _attachmentSignature(ThreadItem item) {
-    if (item.attachments.isEmpty) {
-      return const [];
-    }
-    return item.attachments
-        .map((attachment) => attachment.toJson())
-        .toList(growable: false);
-  }
-
-  String _normalizedUserText(ThreadItem item) {
-    final buffer = StringBuffer();
-    for (final part in item.content) {
-      final type = (part['type'] as String?)?.toLowerCase();
-      if (type == 'input_text') {
-        final text = (part['text'] as String?) ?? '';
-        buffer.writeln(text);
-      }
-    }
-    return buffer.toString().replaceAll('\r', '').trim();
-  }
-
-  bool _createdCloseTo(ThreadItem a, ThreadItem b, {Duration? window}) {
-    final threshold = window ?? const Duration(minutes: 2);
-    final diff = a.createdAt.difference(b.createdAt).abs();
-    return diff <= threshold;
-  }
-
-  bool _isUserAuthoredItem(ThreadItem item) {
-    final type = item.type.toLowerCase();
-    if (type == 'user_message' ||
-        type == 'input_message' ||
-        type == 'message') {
-      return true;
-    }
-    final role = item.role?.toLowerCase();
-    if (role == 'user') {
-      return true;
-    }
-    for (final entry in item.content) {
-      final contentType = (entry['type'] as String?)?.toLowerCase();
-      if (contentType != null && contentType.startsWith('input_')) {
-        return true;
-      }
-    }
-    return false;
   }
 
   void _handleComposerFocusChange() {
