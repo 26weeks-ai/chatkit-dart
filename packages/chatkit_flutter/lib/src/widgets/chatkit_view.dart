@@ -416,8 +416,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
     }
     final fallbackIndex = _items.indexWhere(
       (entry) =>
-          entry.metadata['pending'] == true &&
-          entry.threadId == item.threadId,
+          entry.metadata['pending'] == true && entry.threadId == item.threadId,
     );
     if (fallbackIndex != -1) {
       final updated = [..._items]..removeAt(fallbackIndex);
@@ -2606,8 +2605,18 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
   void _scheduleScrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      final maxExtent = position.maxScrollExtent;
+      final delta = maxExtent - position.pixels;
+      if (delta.abs() < 4) {
+        return;
+      }
+      if (delta > 512) {
+        _scrollController.jumpTo(maxExtent);
+        return;
+      }
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        maxExtent,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
