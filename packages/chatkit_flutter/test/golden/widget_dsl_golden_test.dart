@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:chatkit_core/chatkit_core.dart';
 import 'package:chatkit_core/src/api/api_client.dart';
+import 'package:chatkit_flutter/src/theme/chatkit_theme.dart';
 import 'package:chatkit_flutter/src/widgets/widget_renderer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,39 @@ class _NoopApiClient extends ChatKitApiClient {
 
 Map<String, Object?> _deepCopy(Map<String, Object?> value) {
   return (jsonDecode(jsonEncode(value)) as Map).cast<String, Object?>();
+}
+
+Widget _buildThemedHarness({
+  required ChatKitController controller,
+  required Widget child,
+  Color backgroundColor = const Color(0xFFF1F5F9),
+  Brightness? platformBrightness,
+  ThemeData? overrideBaseTheme,
+}) {
+  final brightness = platformBrightness ?? Brightness.light;
+  final baseTheme = overrideBaseTheme ??
+      ThemeData(
+        useMaterial3: true,
+        brightness: brightness,
+      );
+  final chatTheme = ChatKitThemeData.fromOptions(
+    base: baseTheme,
+    option: controller.options.resolvedTheme,
+    platformBrightness: brightness,
+  );
+  return MaterialApp(
+    theme: baseTheme,
+    home: ChatKitTheme(
+      data: chatTheme,
+      child: Theme(
+        data: chatTheme.materialTheme,
+        child: Scaffold(
+          backgroundColor: backgroundColor,
+          body: child,
+        ),
+      ),
+    ),
+  );
 }
 
 final Map<String, Object?> _dashboardWidget = <String, Object?>{
@@ -586,18 +620,16 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          backgroundColor: const Color(0xFFF1F5F9),
-          body: Center(
-            child: SizedBox(
-              width: 720,
-              child: ChatKitWidgetRenderer(
-                widgetJson: widgetJson,
-                controller: controller,
-                item: item,
-              ),
+      _buildThemedHarness(
+        controller: controller,
+        backgroundColor: const Color(0xFFF1F5F9),
+        child: Center(
+          child: SizedBox(
+            width: 720,
+            child: ChatKitWidgetRenderer(
+              widgetJson: widgetJson,
+              controller: controller,
+              item: item,
             ),
           ),
         ),
@@ -645,18 +677,16 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          body: Center(
-            child: SizedBox(
-              width: 560,
-              child: ChatKitWidgetRenderer(
-                widgetJson: widgetJson,
-                controller: controller,
-                item: item,
-              ),
+      _buildThemedHarness(
+        controller: controller,
+        backgroundColor: const Color(0xFFF8FAFC),
+        child: Center(
+          child: SizedBox(
+            width: 560,
+            child: ChatKitWidgetRenderer(
+              widgetJson: widgetJson,
+              controller: controller,
+              item: item,
             ),
           ),
         ),
@@ -702,18 +732,16 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          backgroundColor: const Color(0xFFF1F5F9),
-          body: Center(
-            child: SizedBox(
-              width: 880,
-              child: ChatKitWidgetRenderer(
-                widgetJson: widgetJson,
-                controller: controller,
-                item: item,
-              ),
+      _buildThemedHarness(
+        controller: controller,
+        backgroundColor: const Color(0xFFF1F5F9),
+        child: Center(
+          child: SizedBox(
+            width: 880,
+            child: ChatKitWidgetRenderer(
+              widgetJson: widgetJson,
+              controller: controller,
+              item: item,
             ),
           ),
         ),
@@ -759,18 +787,16 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          body: Center(
-            child: SizedBox(
-              width: 720,
-              child: ChatKitWidgetRenderer(
-                widgetJson: widgetJson,
-                controller: controller,
-                item: item,
-              ),
+      _buildThemedHarness(
+        controller: controller,
+        backgroundColor: const Color(0xFFF8FAFC),
+        child: Center(
+          child: SizedBox(
+            width: 720,
+            child: ChatKitWidgetRenderer(
+              widgetJson: widgetJson,
+              controller: controller,
+              item: item,
             ),
           ),
         ),
@@ -808,17 +834,15 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 480,
-              child: ChatKitWidgetRenderer(
-                widgetJson: widgetJson,
-                controller: controller,
-                item: item,
-              ),
+      _buildThemedHarness(
+        controller: controller,
+        child: Center(
+          child: SizedBox(
+            width: 480,
+            child: ChatKitWidgetRenderer(
+              widgetJson: widgetJson,
+              controller: controller,
+              item: item,
             ),
           ),
         ),

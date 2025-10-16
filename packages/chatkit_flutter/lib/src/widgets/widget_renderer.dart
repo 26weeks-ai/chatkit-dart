@@ -8,7 +8,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chatkit_core/chatkit_core.dart';
 import 'package:collection/collection.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -18,6 +17,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:signature/signature.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
+import '../theme/chatkit_theme.dart';
+import '../theme/icons.dart';
+import '../theme/styles.dart';
 import 'media_player.dart';
 
 class ChatKitWidgetRenderer extends StatefulWidget {
@@ -37,6 +39,13 @@ class ChatKitWidgetRenderer extends StatefulWidget {
 }
 
 class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
+  ChatKitThemeData _chatThemeOf(BuildContext context) =>
+      ChatKitTheme.of(context);
+
+  static const _defaultTransitionAnimation = 'fade';
+  static const _defaultSwitchInCurve = Curves.easeOutCubic;
+  static const _defaultSwitchOutCurve = Curves.easeInCubic;
+
   static const Widget _emptyTransitionChild =
       SizedBox.shrink(key: ValueKey('__transition.empty__'));
   static const Map<String, double> _spacingScale = {
@@ -154,6 +163,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       case 'section':
       case 'stack':
       case 'box':
+      case 'basic':
       case 'column':
       case 'col':
       case 'row':
@@ -271,12 +281,14 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
   }
 
   Widget _buildCard(Map<String, Object?> component, BuildContext context) {
+    final chatTheme = _chatThemeOf(context);
+    final spacing = chatTheme.spacing;
     final children = _buildChildren(component['children'], context);
     final sizeToken = (component['size'] as String? ?? 'md').toLowerCase();
-    final padding =
-        _edgeInsets(component['padding']) ?? _cardPaddingForSize(sizeToken);
-    final margin = _edgeInsets(component['margin']) ??
-        const EdgeInsets.symmetric(vertical: 6);
+    final padding = _edgeInsets(component['padding'], context) ??
+        _cardPaddingForSize(sizeToken, spacing: spacing);
+    final margin = _edgeInsets(component['margin'], context) ??
+        _spacingSymmetric(context, vertical: 6);
     final background = _colorFromToken(context, component['background']);
     final status = _buildWidgetStatus(component['status'], context);
     final asForm = component['asForm'] as bool? ?? false;
@@ -316,16 +328,16 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final bodyChildren = <Widget>[
       if (status != null)
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: _spacingOnly(context, bottom: 12),
           child: status,
         ),
       if (!collapsed) ...children,
       if (footerButtons.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: 16),
+          padding: _spacingOnly(context, top: 16),
           child: Wrap(
-            spacing: 12,
-            runSpacing: 8,
+            spacing: spacing.sm,
+            runSpacing: spacing.xs,
             alignment: WrapAlignment.end,
             children: footerButtons,
           ),
@@ -366,12 +378,21 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         component['image'] as String? ?? component['background'] as String?;
     final title = component['title'] as String?;
     final subtitle = component['subtitle'] as String?;
+    final chatTheme = _chatThemeOf(context);
+    final palette = chatTheme.palette;
+    final theme = Theme.of(context);
+    final hasImage = imageUrl != null;
+    final onColor = hasImage
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onPrimaryContainer;
+    final subtitleColor = onColor.withValues(alpha: 0.7);
     return Container(
-      margin: _edgeInsets(component['margin']) ??
-          const EdgeInsets.symmetric(vertical: 8),
-      padding: _edgeInsets(component['padding']) ?? const EdgeInsets.all(24),
+      margin: _edgeInsets(component['margin'], context) ??
+          _spacingSymmetric(context, vertical: 8),
+      padding: _edgeInsets(component['padding'], context) ??
+          _spacingAll(context, 24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: _circularRadius(context, 16),
         color: imageUrl == null
             ? Theme.of(context).colorScheme.primaryContainer
             : null,
@@ -380,7 +401,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                 image: CachedNetworkImageProvider(imageUrl),
                 fit: BoxFit.cover,
                 colorFilter: ColorFilter.mode(
-                  Colors.black.withValues(alpha: 0.45),
+                  palette.overlayStrong.withValues(alpha: 0.45),
                   BlendMode.darken,
                 ),
               )
@@ -392,20 +413,15 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           if (title != null)
             Text(
               title,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(color: Colors.white),
+              style: theme.textTheme.headlineSmall?.copyWith(color: onColor),
             ),
           if (subtitle != null)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: _spacingOnly(context, top: 8),
               child: Text(
                 subtitle,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(color: Colors.white70),
+                style:
+                    theme.textTheme.titleMedium?.copyWith(color: subtitleColor),
               ),
             ),
           ...children,
@@ -421,7 +437,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ?.toLowerCase()
         .trim()
         .replaceAll('_', '-');
-    final gap = _spacingToDouble(component['gap']);
+    final gapToken = _spacingToDouble(component['gap']);
+    final gap =
+        gapToken != null ? _resolveSpacingValue(context, gapToken) : null;
     final alignToken = (component['align'] as String?)?.toLowerCase().trim();
     final justifyToken =
         (component['justify'] as String?)?.toLowerCase().trim();
@@ -510,13 +528,23 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final duration = durationMs != null && durationMs >= 0
         ? Duration(milliseconds: durationMs)
         : const Duration(milliseconds: 250);
+    final animationType =
+        (component['animation'] as String?)?.toLowerCase().trim() ??
+            _defaultTransitionAnimation;
+    final direction = (component['direction'] as String?)?.toLowerCase().trim();
+    final curveName = (component['curve'] as String?)?.toLowerCase().trim();
+    final reverseCurveName =
+        (component['reverseCurve'] as String?)?.toLowerCase().trim();
 
-    final padding = _edgeInsets(component['padding']);
+    final padding = _edgeInsets(component['padding'], context);
 
     Widget animated = AnimatedSwitcher(
       duration: duration,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      reverseDuration: duration,
+      switchInCurve: _curveFromName(curveName) ?? _defaultSwitchInCurve,
+      switchOutCurve: _curveFromName(reverseCurveName) ??
+          _curveFromName(curveName) ??
+          _defaultSwitchOutCurve,
       layoutBuilder: (currentChild, previousChildren) {
         return Stack(
           alignment: Alignment.topLeft,
@@ -527,11 +555,11 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         );
       },
       transitionBuilder: (current, animation) {
-        final fade = FadeTransition(opacity: animation, child: current);
-        return SizeTransition(
-          sizeFactor: animation,
-          axisAlignment: -1,
-          child: fade,
+        return _buildAnimatedSwitcherTransition(
+          animationType,
+          direction,
+          animation,
+          current,
         );
       },
       child: child,
@@ -544,6 +572,110 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     }
 
     return animated;
+  }
+
+  Curve? _curveFromName(String? name) {
+    if (name == null || name.isEmpty) {
+      return null;
+    }
+    switch (name) {
+      case 'linear':
+        return Curves.linear;
+      case 'ease':
+      case 'easeinout':
+        return Curves.easeInOut;
+      case 'easein':
+        return Curves.easeIn;
+      case 'easeout':
+        return Curves.easeOut;
+      case 'fastoutslowin':
+        return Curves.fastOutSlowIn;
+      case 'decelerate':
+        return Curves.decelerate;
+      case 'easeincubic':
+        return Curves.easeInCubic;
+      case 'easeoutcubic':
+        return Curves.easeOutCubic;
+      default:
+        return null;
+    }
+  }
+
+  Offset _transitionOffset(String? direction) {
+    switch (direction) {
+      case 'left':
+        return const Offset(-0.12, 0);
+      case 'right':
+        return const Offset(0.12, 0);
+      case 'down':
+        return const Offset(0, -0.12);
+      case 'up':
+      default:
+        return const Offset(0, 0.12);
+    }
+  }
+
+  Widget _buildAnimatedSwitcherTransition(
+    String animationType,
+    String? direction,
+    Animation<double> animation,
+    Widget child,
+  ) {
+    final normalized =
+        animationType.isEmpty ? _defaultTransitionAnimation : animationType;
+    switch (normalized) {
+      case 'slide':
+        final offset = _transitionOffset(direction);
+        final isReverse = animation.status == AnimationStatus.reverse;
+        final tween = Tween<Offset>(
+          begin: isReverse ? Offset.zero : offset,
+          end: isReverse ? offset : Offset.zero,
+        );
+        final position = animation.drive(tween);
+        return SlideTransition(
+          position: position,
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
+        );
+      case 'scale':
+        final isReverse = animation.status == AnimationStatus.reverse;
+        final tween = Tween<double>(
+          begin: isReverse ? 1.0 : 0.92,
+          end: isReverse ? 0.92 : 1.0,
+        );
+        final scale = animation.drive(tween);
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: scale,
+            child: child,
+          ),
+        );
+      case 'fade-through':
+        final isReverse = animation.status == AnimationStatus.reverse;
+        final tween = Tween<double>(
+          begin: isReverse ? 1.0 : 0.92,
+          end: isReverse ? 0.92 : 1.0,
+        );
+        final scale = animation.drive(tween);
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: scale,
+            child: child,
+          ),
+        );
+      case 'none':
+        return child;
+      case 'fade':
+      default:
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+    }
   }
 
   Widget _buildText(Map<String, Object?> component, BuildContext context) {
@@ -575,8 +707,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         style = style.copyWith(fontWeight: FontWeight.bold);
     }
     return Padding(
-      padding: _edgeInsets(component['margin']) ??
-          const EdgeInsets.symmetric(vertical: 4),
+      padding: _edgeInsets(component['margin'], context) ??
+          _spacingSymmetric(context, vertical: 4),
       child: Text(value, style: style),
     );
   }
@@ -584,8 +716,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
   Widget _buildMarkdown(Map<String, Object?> component, BuildContext context) {
     final value = component['value'] as String? ?? '';
     return Padding(
-      padding: _edgeInsets(component['margin']) ??
-          const EdgeInsets.symmetric(vertical: 4),
+      padding: _edgeInsets(component['margin'], context) ??
+          _spacingSymmetric(context, vertical: 4),
       child: MarkdownBody(data: value),
     );
   }
@@ -595,10 +727,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     if (src == null) {
       return const SizedBox.shrink();
     }
-    final radius = BorderRadius.circular(12);
+    final radius = _circularRadius(context, 12);
     return Padding(
-      padding: _edgeInsets(component['margin']) ??
-          const EdgeInsets.symmetric(vertical: 6),
+      padding: _edgeInsets(component['margin'], context) ??
+          _spacingSymmetric(context, vertical: 6),
       child: ClipRRect(
         borderRadius: radius,
         child: CachedNetworkImage(
@@ -613,11 +745,20 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
 
   Widget _buildButton(Map<String, Object?> component, BuildContext context) {
     final label = component['label'] as String? ?? 'Action';
-    final variant = (component['variant'] as String? ?? 'solid').toLowerCase();
+    final variantToken =
+        (component['variant'] as String? ?? 'solid').toLowerCase().trim();
+    final sizeToken =
+        (component['size'] as String? ?? 'md').toLowerCase().trim();
+    final toneToken =
+        (component['tone'] as String? ?? component['intent'] as String? ?? '')
+            .toLowerCase()
+            .trim();
     final action = component['action'] as Map<String, Object?>?;
     final disabled = component['disabled'] as bool? ?? false;
     final isLoading = action != null && _pendingSelfActions.contains(action);
     final effectiveDisabled = disabled || isLoading;
+    final palette = _chatThemeOf(context).palette;
+
     void Function()? onPressed;
     if (action != null && !effectiveDisabled) {
       onPressed = () => _dispatchAction(
@@ -628,21 +769,63 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           );
     }
 
+    final ChatKitButtonVariant variant = switch (variantToken) {
+      'soft' => ChatKitButtonVariant.soft,
+      'outline' => ChatKitButtonVariant.outline,
+      'ghost' => ChatKitButtonVariant.ghost,
+      _ => ChatKitButtonVariant.solid,
+    };
+
+    final ChatKitButtonSize size = switch (sizeToken) {
+      'sm' => ChatKitButtonSize.sm,
+      'lg' => ChatKitButtonSize.lg,
+      _ => ChatKitButtonSize.md,
+    };
+
+    final danger = toneToken == 'danger' ||
+        toneToken == 'critical' ||
+        toneToken == 'error' ||
+        variantToken.contains('danger') ||
+        (component['color'] as String?)?.toLowerCase() == 'danger';
+
+    final style = ChatKitStyles.buttonStyle(
+      context,
+      variant: variant,
+      size: size,
+      danger: danger,
+    );
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final spinnerColor = switch (variant) {
+      ChatKitButtonVariant.solid =>
+        danger ? colorScheme.onError : colorScheme.onPrimary,
+      _ => danger ? palette.danger : palette.onSurface,
+    };
+
     final Widget child = isLoading
-        ? const SizedBox(
+        ? SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(spinnerColor),
+            ),
           )
         : Text(label);
+
     switch (variant) {
-      case 'ghost':
-      case 'outline':
-        return OutlinedButton(onPressed: onPressed, child: child);
-      case 'soft':
-        return FilledButton.tonal(onPressed: onPressed, child: child);
-      default:
-        return FilledButton(onPressed: onPressed, child: child);
+      case ChatKitButtonVariant.ghost:
+        return TextButton(style: style, onPressed: onPressed, child: child);
+      case ChatKitButtonVariant.outline:
+        return OutlinedButton(style: style, onPressed: onPressed, child: child);
+      case ChatKitButtonVariant.soft:
+        return FilledButton.tonal(
+          style: style,
+          onPressed: onPressed,
+          child: child,
+        );
+      case ChatKitButtonVariant.solid:
+        return FilledButton(style: style, onPressed: onPressed, child: child);
     }
   }
 
@@ -675,6 +858,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       }
     }
 
+    final chatTheme = ChatKitTheme.of(context);
+    final spacing = chatTheme.spacing;
     final gap = _spacingToDouble(component['gap']);
     final spacedItems = (gap != null && gap > 0)
         ? _withGapBetween(items, gap, Axis.vertical)
@@ -684,7 +869,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final children = [
       if (statusWidget != null)
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.only(bottom: spacing.sm),
           child: statusWidget,
         ),
       ...spacedItems,
@@ -731,8 +916,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     Widget result = decorated.child;
     final action = component['onClickAction'] as Map<String, Object?>?;
     if (action != null) {
+      final palette = _chatThemeOf(context).palette;
       result = Material(
-        color: Colors.transparent,
+        color: palette.transparent,
         child: InkWell(
           borderRadius: decorated.borderRadius,
           onTap: () => _dispatchAction(
@@ -756,6 +942,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
   }
 
   Widget _buildTimeline(Map<String, Object?> component, BuildContext context) {
+    final spacing = _chatThemeOf(context).spacing;
     final items = (component['items'] as List?)
             ?.map((item) => castMap(item))
             .toList(growable: false) ??
@@ -798,7 +985,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       );
       if (showDividers && entry.$1 != items.length - 1) {
-        children.add(const Divider(height: 32));
+        children.add(Divider(height: spacing.xxl));
       }
     }
 
@@ -830,6 +1017,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     required _TimelineLineStyle lineStyle,
     required bool dense,
   }) {
+    final chatTheme = _chatThemeOf(context);
+    final spacing = chatTheme.spacing;
+    final radii = chatTheme.radii;
     final theme = Theme.of(context);
     final title = component['title'] as String? ?? '';
     final subtitle = component['subtitle'] as String?;
@@ -871,10 +1061,13 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final contentChildren = <Widget>[
       if (badge != null && badge.isNotEmpty)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: EdgeInsets.symmetric(
+            horizontal: spacing.sm,
+            vertical: spacing.xs,
+          ),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(999),
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(radii.full),
           ),
           child: Text(
             badge,
@@ -886,7 +1079,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       if (title.isNotEmpty)
         Padding(
-          padding: EdgeInsets.only(top: badge != null ? 8 : 0),
+          padding: EdgeInsets.only(
+            top: badge != null && badge.isNotEmpty ? spacing.xs : 0,
+          ),
           child: Text(
             title,
             style: theme.textTheme.titleMedium?.copyWith(
@@ -896,7 +1091,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       if (subtitle != null && subtitle.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: spacing.xxs),
           child: Text(
             subtitle,
             style: theme.textTheme.bodyMedium,
@@ -904,7 +1099,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       if (formattedTimestamp != null)
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: spacing.xxs),
           child: Text(
             formattedTimestamp,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -914,23 +1109,26 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       if (statusWidget != null)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: EdgeInsets.only(top: spacing.sm),
           child: statusWidget,
         ),
       if (tags.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: EdgeInsets.only(top: spacing.sm),
           child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
+            spacing: spacing.xs,
+            runSpacing: spacing.xs - spacing.xxxs,
             children: [
               for (final tag in tags)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: spacing.sm - spacing.xxxs,
+                    vertical: spacing.xxs,
+                  ),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(999),
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(radii.full),
                   ),
                   child: Text(
                     tag,
@@ -944,7 +1142,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       if (children.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: EdgeInsets.only(top: spacing.sm),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: children,
@@ -957,30 +1155,37 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       children: contentChildren,
     );
 
-    final verticalPadding = dense
-        ? const EdgeInsets.symmetric(vertical: 8)
-        : const EdgeInsets.symmetric(vertical: 16);
+    final verticalPadding = EdgeInsets.symmetric(
+      vertical: dense ? spacing.xs : spacing.md,
+    );
 
     final markerVariant =
         (component['variant'] as String?)?.toLowerCase().trim() ?? '';
     final hollow =
         markerVariant.contains('outline') || markerVariant.contains('hollow');
 
+    final palette = _chatThemeOf(context).palette;
     final axis = SizedBox(
-      width: 40,
+      width: spacing.xxxl,
       child: Column(
         children: [
           Container(
-            width: 18,
-            height: 18,
+            width: spacing.md + spacing.xxxs,
+            height: spacing.md + spacing.xxxs,
             decoration: BoxDecoration(
-              color: hollow ? Colors.transparent : color,
-              borderRadius: BorderRadius.circular(12),
+              color: hollow ? palette.transparent : color,
+              borderRadius: BorderRadius.circular(radii.card),
               border: Border.all(color: color, width: 2),
             ),
             alignment: Alignment.center,
             child: icon != null
-                ? Icon(icon, size: 12, color: hollow ? color : Colors.white)
+                ? Icon(
+                    icon,
+                    size: spacing.xs + spacing.xxxs,
+                    color: hollow
+                        ? color
+                        : Theme.of(context).colorScheme.onPrimary,
+                  )
                 : null,
           ),
           if (index != total - 1)
@@ -1026,12 +1231,18 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       } else {
         icon = Icons.star_border;
       }
-      stars.add(Icon(icon, color: Colors.amber));
+      stars.add(
+        Icon(
+          icon,
+          color: _chatThemeOf(context).palette.warning,
+        ),
+      );
     }
     return Row(children: stars);
   }
 
   Widget _buildCarousel(Map<String, Object?> component, BuildContext context) {
+    final spacing = _chatThemeOf(context).spacing;
     final slides = _resolveCarouselSlides(component, context);
     if (slides.isEmpty) {
       return const SizedBox.shrink();
@@ -1077,7 +1288,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       itemBuilder: (context, index) {
         final slide = slides[index];
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: _spacingSymmetric(context, horizontal: 8),
           child: _buildCarouselSlide(
             context: context,
             slide: slide,
@@ -1090,13 +1301,13 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
 
     final indicator = showIndicators && slides.length > 1
         ? Padding(
-            padding: const EdgeInsets.only(top: 12),
+            padding: _spacingOnly(context, top: 12),
             child: SmoothPageIndicator(
               controller: controller,
               count: slides.length,
               effect: WormEffect(
-                dotHeight: 8,
-                dotWidth: 8,
+                dotHeight: spacing.xs,
+                dotWidth: spacing.xs,
                 dotColor: Theme.of(context).colorScheme.outlineVariant,
                 activeDotColor: Theme.of(context).colorScheme.primary,
               ),
@@ -1106,7 +1317,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
 
     final controls = showControls && slides.length > 1
         ? Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: _spacingOnly(context, top: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1187,6 +1398,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
   }
 
   Widget _buildMap(Map<String, Object?> component, BuildContext context) {
+    final chatTheme = _chatThemeOf(context);
     final centerData = castMap(component['center']);
     final lat = (centerData['lat'] as num?)?.toDouble();
     final lng = (centerData['lng'] as num?)?.toDouble() ??
@@ -1224,7 +1436,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: _circularRadius(context, 12),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1253,14 +1465,16 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           ),
           if (title != null || description != null)
             Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
+              left: _resolveSpacingValue(context, 12),
+              right: _resolveSpacingValue(context, 12),
+              bottom: _resolveSpacingValue(context, 12),
               child: Container(
-                padding: const EdgeInsets.all(12),
+                padding: _spacingAll(context, 12),
                 decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(12),
+                  color: chatTheme.palette.overlayStrong.withValues(
+                    alpha: 0.6,
+                  ),
+                  borderRadius: _circularRadius(context, 12),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1268,15 +1482,20 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                     if (title != null)
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: Theme.of(context).colorScheme.onPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                     if (description != null)
                       Text(
                         description,
-                        style: const TextStyle(color: Colors.white70),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onPrimary
+                                  .withValues(alpha: 0.7),
+                            ),
                       ),
                   ],
                 ),
@@ -1302,6 +1521,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final color = _colorFromToken(context, marker['color']) ??
         Theme.of(context).colorScheme.primary;
 
+    final chatTheme = _chatThemeOf(context);
+    final spacing = chatTheme.spacing;
     return Marker(
       point: LatLng(lat, lng),
       width: 44,
@@ -1319,22 +1540,34 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             : null,
         child: Column(
           children: [
-            const Icon(Icons.location_on, size: 28, color: Colors.black87),
+            Icon(
+              Icons.location_on,
+              size: 28,
+              color: _chatThemeOf(context)
+                  .palette
+                  .overlayStrong
+                  .withValues(alpha: 0.9),
+            ),
             Icon(Icons.circle, size: 12, color: color),
             if (label != null)
               Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                margin: _spacingOnly(context, top: 4),
+                padding: EdgeInsets.symmetric(
+                  horizontal: spacing.xs - spacing.xxxs,
+                  vertical: spacing.xxxs,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(8),
+                  color: chatTheme.palette.overlayStrong.withValues(
+                    alpha: 0.9,
+                  ),
+                  borderRadius: _circularRadius(context, 8),
                 ),
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontSize: 10,
+                      ),
                 ),
               ),
           ],
@@ -1355,7 +1588,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           Align(
             alignment: Alignment.centerRight,
             child: Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: _spacingOnly(context, top: 12),
               child: FilledButton(
                 onPressed: _pendingSelfActions.contains(submitAction)
                     ? null
@@ -1394,19 +1627,27 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final errorText = component['errorText'] as String?;
     final placeholder = component['placeholder'] as String?;
     final required = component['required'] as bool? ?? false;
-    final prefixIcon = _iconFromName(component['iconStart'] as String?);
-    final suffixIcon = _iconFromName(component['iconEnd'] as String?);
+    final prefixIconData = _iconFromName(component['iconStart'] as String?);
+    final suffixIconData = _iconFromName(component['iconEnd'] as String?);
+    final prefixIcon =
+        prefixIconData != null ? Icon(prefixIconData, size: 18) : null;
+    final suffixIcon =
+        suffixIconData != null ? Icon(suffixIconData, size: 18) : null;
     final maxLength = (component['maxLength'] as num?)?.toInt();
     final fieldError = name.isNotEmpty ? _fieldErrors[name] : null;
-
-    final decoration = InputDecoration(
-      labelText: component['label'] as String?,
-      hintText: placeholder,
-      helperText: fieldError == null ? helperText : null,
-      errorText: fieldError ?? errorText,
+    final variantToken =
+        (component['variant'] as String? ?? '').trim().toLowerCase();
+    final decoration = ChatKitStyles.inputDecoration(
+      context,
+      label: component['label'] as String?,
+      hint: placeholder,
+      helper: fieldError == null ? helperText : null,
+      error: fieldError ?? errorText,
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      withBorder: variantToken == 'outline' || variantToken == 'bordered',
+    ).copyWith(
       counterText: maxLength != null ? '' : null,
-      prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-      suffixIcon: suffixIcon != null ? Icon(suffixIcon) : null,
       floatingLabelBehavior:
           required ? FloatingLabelBehavior.always : FloatingLabelBehavior.auto,
     );
@@ -1437,10 +1678,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           obscureText: obscure,
           keyboardType: keyboardType,
           maxLength: maxLength,
-          decoration: decoration.copyWith(
-            prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-            suffixIcon: suffixIcon != null ? Icon(suffixIcon) : null,
-          ),
+          decoration: decoration,
           onChanged: (value) {
             _setFieldValue(name, value);
             _handleFieldInteraction(name, markTouched: true, validate: true);
@@ -1556,7 +1794,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           children: [
             if (component['label'] != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: _spacingOnly(context, bottom: 8),
                 child: Text(
                   component['label'] as String,
                   style: Theme.of(context).textTheme.labelLarge,
@@ -1593,7 +1831,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
               ),
             if (fieldError != null || helperText != null)
               Padding(
-                padding: const EdgeInsets.only(left: 16, top: 4),
+                padding: _spacingFromLTRB(context, 16, 4, 0, 0),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1685,7 +1923,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
               ),
             if (fieldError != null || helperText != null)
               Padding(
-                padding: const EdgeInsets.only(left: 16, top: 4),
+                padding: _spacingFromLTRB(context, 16, 4, 0, 0),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1858,7 +2096,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             if (fieldError != null || helperText != null)
               Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    _spacingSymmetric(context, horizontal: 16, vertical: 4),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1882,7 +2120,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           children: [
             if (component['label'] != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+                padding: _spacingOnly(context, bottom: 4),
                 child: Text(component['label'] as String),
               ),
             Slider(
@@ -1907,7 +2145,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             ),
             if (fieldError != null || helperText != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: _spacingOnly(context, top: 4),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1978,7 +2216,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             ),
             if (fieldError != null || helperText != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: _spacingOnly(context, top: 4),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2034,7 +2272,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             ),
             if (fieldError != null || helperText != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: _spacingOnly(context, top: 4),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2047,7 +2285,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           ],
         );
       case 'signature':
-        final controller = _signatureControllerFor(name);
+        final controller = _signatureControllerFor(context, name);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2058,7 +2296,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                   border: Border.all(
                     color: Theme.of(context).colorScheme.outlineVariant,
                   ),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: _circularRadius(context, 12),
                 ),
                 child: Signature(
                   controller: controller,
@@ -2101,7 +2339,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             ),
             if (fieldError != null || helperText != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: _spacingOnly(context, top: 8),
                 child: Text(
                   fieldError ?? helperText ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2136,7 +2374,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         final action = component['onVerifyAction'] as Map<String, Object?>?;
         return Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: _spacingAll(context, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2283,7 +2521,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
             if (currentOption.description != null &&
                 currentOption.description!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 2),
+                padding: _spacingOnly(context, top: 2),
                 child: Text(
                   currentOption.description!,
                   style: theme.textTheme.bodySmall,
@@ -2475,7 +2713,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     return Focus(
       focusNode: focusNode,
       child: Material(
-        color: Colors.transparent,
+        color: _chatThemeOf(context).palette.transparent,
         child: InkWell(
           onTap: disabled ? null : handleTap,
           borderRadius: const BorderRadius.all(Radius.circular(8)),
@@ -2525,7 +2763,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                       children: [
                         if (searchable)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            padding: _spacingFromLTRB(context, 16, 8, 16, 8),
                             child: TextField(
                               controller: searchController,
                               autofocus: true,
@@ -2550,7 +2788,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                           child: filtered.isEmpty && !loading
                               ? Center(
                                   child: Padding(
-                                    padding: const EdgeInsets.all(24),
+                                    padding: _spacingAll(context, 24),
                                     child: Text(
                                       emptyText,
                                       textAlign: TextAlign.center,
@@ -2576,7 +2814,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                                       if (group.label != null &&
                                           group.label!.isNotEmpty)
                                         Padding(
-                                          padding: const EdgeInsets.fromLTRB(
+                                          padding: _spacingFromLTRB(
+                                            context,
                                             16,
                                             12,
                                             16,
@@ -2669,7 +2908,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                       if (group.label != null && group.label!.isNotEmpty) {
                         listChildren.add(
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            padding: _spacingFromLTRB(context, 16, 12, 16, 4),
                             child: Text(
                               group.label!,
                               style: Theme.of(context)
@@ -2713,7 +2952,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                       children: [
                         if (searchable)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            padding: _spacingFromLTRB(context, 16, 8, 16, 8),
                             child: TextField(
                               controller: searchController,
                               decoration: InputDecoration(
@@ -2737,7 +2976,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                           child: filtered.isEmpty && !loading
                               ? Center(
                                   child: Padding(
-                                    padding: const EdgeInsets.all(24),
+                                    padding: _spacingAll(context, 24),
                                     child: Text(
                                       emptyText,
                                       textAlign: TextAlign.center,
@@ -2750,7 +2989,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
                                 ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          padding: _spacingFromLTRB(context, 16, 8, 16, 16),
                           child: Row(
                             children: [
                               TextButton(
@@ -2981,7 +3220,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       children: [
         for (final entry in entries)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: _spacingSymmetric(context, vertical: 2),
             child: Row(
               children: [
                 Text('${entry['label']}: ',
@@ -3002,7 +3241,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         LinearProgressIndicator(value: value == 0 ? null : value.clamp(0, 1)),
         if (component['label'] != null)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: _spacingOnly(context, top: 4),
             child: Text(component['label'] as String),
           ),
       ],
@@ -3024,8 +3263,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final size = (component['size'] as num?)?.toDouble();
     final color = _colorFromToken(context, component['color']) ??
         Theme.of(context).iconTheme.color;
-    final padding = _edgeInsets(component['padding']);
-    final margin = _edgeInsets(component['margin']);
+    final padding = _edgeInsets(component['padding'], context);
+    final margin = _edgeInsets(component['margin'], context);
     final tooltip = component['tooltip'] as String?;
     final label = component['label'] as String?;
 
@@ -3068,13 +3307,15 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     final pill = component['pill'] as bool? ?? false;
 
     final padding = switch (sizeToken) {
-      'sm' => const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      'lg' => const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      _ => const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      'sm' => _spacingSymmetric(context, horizontal: 8, vertical: 2),
+      'lg' => _spacingSymmetric(context, horizontal: 12, vertical: 6),
+      _ => _spacingSymmetric(context, horizontal: 10, vertical: 4),
     };
 
+    final theme = Theme.of(context);
+    final palette = _chatThemeOf(context).palette;
     final color = _colorFromToken(context, component['color']) ??
-        Theme.of(context).colorScheme.primary;
+        theme.colorScheme.primary;
     final Color background;
     final Color border;
     final Color foreground;
@@ -3085,14 +3326,14 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         foreground = color;
         break;
       case 'outline':
-        background = Colors.transparent;
+        background = palette.transparent;
         border = color.withValues(alpha: 0.6);
         foreground = color;
         break;
       default:
         background = color;
-        border = Colors.transparent;
-        foreground = Colors.white;
+        border = palette.transparent;
+        foreground = theme.colorScheme.onPrimary;
         break;
     }
 
@@ -3105,10 +3346,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w600,
-            ),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -3139,7 +3380,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       children: [
         for (final entry in entries)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: _spacingSymmetric(context, vertical: 6),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -3285,7 +3526,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         );
       },
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: _spacingSymmetric(context, horizontal: 12, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: _buildChildren(item['children'], context),
@@ -3313,7 +3554,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           showDragHandle: true,
           builder: (context) {
             return Padding(
-              padding: const EdgeInsets.all(16),
+              padding: _spacingAll(context, 16),
               child: _buildModalContent(
                 context,
                 title,
@@ -3372,7 +3613,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       children: [
         if (title != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: _spacingOnly(context, bottom: 12),
             child: Text(
               title,
               style: Theme.of(context).textTheme.titleLarge,
@@ -3381,7 +3622,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         _buildModalBody(context, children),
         if (actions.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 16),
+            padding: _spacingOnly(context, top: 16),
             child: Wrap(
               spacing: 8,
               children: actions
@@ -3580,7 +3821,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     Widget leading;
     if (previewType == 'image' && url != null) {
       leading = ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: _circularRadius(context, 8),
         child: CachedNetworkImage(
           imageUrl: url,
           width: 48,
@@ -3657,18 +3898,13 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       'danger' || 'error' => Icons.error,
       _ => Icons.info,
     };
-    final color = switch (level) {
-      'success' => Colors.green,
-      'warning' => Colors.orange,
-      'danger' || 'error' => Colors.red,
-      _ => Theme.of(context).colorScheme.primary,
-    };
+    final color = ChatKitStyles.statusColor(context, level);
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(12),
+      margin: _spacingSymmetric(context, vertical: 8),
+      padding: _spacingAll(context, 12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: _circularRadius(context, 12),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -3699,11 +3935,11 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         TextStyle(fontFamily: monospace);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: _spacingAll(context, 12),
+      margin: _spacingSymmetric(context, vertical: 4),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: _circularRadius(context, 8),
       ),
       child: Text(value, style: style),
     );
@@ -3713,8 +3949,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       Map<String, Object?> component, BuildContext context) {
     final value = component['value'] as String? ?? '';
     return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: _spacingAll(context, 12),
+      margin: _spacingSymmetric(context, vertical: 4),
       decoration: BoxDecoration(
         border: Border(
             left: BorderSide(
@@ -3727,10 +3963,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
   Widget _buildPill(Map<String, Object?> component, BuildContext context) {
     final label = component['label'] as String? ?? '';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: _spacingSymmetric(context, horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: _circularRadius(context, 999),
       ),
       child: Text(label),
     );
@@ -3809,10 +4045,11 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
               ? MaterialStateProperty.resolveWith<Color?>(
                   (states) {
                     if (states.contains(MaterialState.selected)) {
-                      return theme.colorScheme.primary.withOpacity(0.12);
+                      return theme.colorScheme.primary.withValues(alpha: 0.12);
                     }
                     return entry.$1.isEven
-                        ? theme.colorScheme.surfaceVariant.withOpacity(0.35)
+                        ? theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.35)
                         : null;
                   },
                 )
@@ -3844,7 +4081,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       tableWidget,
       if (rows.isEmpty && emptyText != null && emptyText.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          padding: _spacingSymmetric(context, horizontal: 16, vertical: 20),
           child: Text(
             emptyText,
             textAlign: TextAlign.center,
@@ -3855,7 +4092,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         ),
       if (caption != null && caption.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: _spacingOnly(context, top: 12),
           child: Text(
             caption,
             style: theme.textTheme.bodySmall,
@@ -3901,7 +4138,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
               children: [
                 for (final tab in tabs)
                   SingleChildScrollView(
-                    padding: const EdgeInsets.all(12),
+                    padding: _spacingAll(context, 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: _buildChildren(tab['children'], context),
@@ -4011,15 +4248,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       }
     }
 
-    final palette = <Color>[
-      Theme.of(context).colorScheme.primary,
-      Colors.blue,
-      Colors.orange,
-      Colors.green,
-      Colors.purple,
-      Colors.red,
-      Colors.teal,
-    ];
+    final palette = ChatKitStyles.chartPalette(context);
 
     final showLegend = component['showLegend'] as bool? ?? true;
     final showTooltip = component['showTooltip'] as bool? ?? true;
@@ -4090,7 +4319,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         SizedBox(height: chartHeight, child: chart),
         if (showLegend)
           Padding(
-            padding: const EdgeInsets.only(top: 12),
+            padding: _spacingOnly(context, top: 12),
             child: Wrap(
               spacing: 12,
               runSpacing: 8,
@@ -4169,7 +4398,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         final raw = categories[index];
         final label = xLabels[raw] ?? raw;
         return Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: _spacingOnly(context, top: 8),
           child: Text(
             label,
             style: Theme.of(context).textTheme.bodySmall,
@@ -4230,7 +4459,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           BarChartRodData(
             toY: value,
             width: 16,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: _circularRadius(context, 6),
             color: config.$2.color,
           ),
         );
@@ -4254,7 +4483,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         final raw = categories[index];
         final label = xLabels[raw] ?? raw;
         return Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: _spacingOnly(context, top: 8),
           child: Text(
             label,
             style: Theme.of(context).textTheme.bodySmall,
@@ -4307,30 +4536,39 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     return null;
   }
 
-  EdgeInsets _cardPaddingForSize(String size) {
+  EdgeInsets _cardPaddingForSize(
+    String size, {
+    required ChatKitSpacing spacing,
+  }) {
     switch (size) {
       case 'sm':
-        return const EdgeInsets.all(12);
+        return EdgeInsets.all(spacing.sm);
       case 'lg':
-        return const EdgeInsets.all(24);
+        return EdgeInsets.all(spacing.xl);
       case 'full':
-        return const EdgeInsets.symmetric(horizontal: 24, vertical: 28);
+        return EdgeInsets.symmetric(
+          horizontal: spacing.xl,
+          vertical: spacing.xl + (spacing.sm - spacing.xxxs),
+        );
       default:
-        return const EdgeInsets.all(16);
+        return EdgeInsets.all(spacing.md);
     }
   }
 
   Widget? _buildWidgetStatus(Object? status, BuildContext context) {
     if (status == null) return null;
+    final chatTheme = _chatThemeOf(context);
+    final spacing = chatTheme.spacing;
     if (status is String) {
       if (status.isEmpty) return null;
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: _spacingSymmetric(context, horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceVariant.withValues(
-                alpha: 0.6,
-              ),
-          borderRadius: BorderRadius.circular(12),
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.6),
+          borderRadius: _circularRadius(context, 12),
         ),
         child: Text(
           status,
@@ -4348,38 +4586,45 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       final frame = status['frame'] as bool? ?? false;
       final theme = Theme.of(context);
       final badgeColor =
-          theme.colorScheme.surfaceVariant.withValues(alpha: 0.85);
-      final outline = theme.colorScheme.outlineVariant.withOpacity(0.6);
+          theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.85);
+      final outline = theme.colorScheme.outlineVariant.withValues(alpha: 0.6);
 
       Widget? leading;
       if (faviconUrl != null && faviconUrl.isNotEmpty) {
         leading = Container(
-          width: 20,
-          height: 20,
-          padding: frame ? const EdgeInsets.all(2) : EdgeInsets.zero,
+          width: spacing.lg,
+          height: spacing.lg,
+          padding: frame ? _spacingAll(context, 2) : EdgeInsets.zero,
           decoration: frame
               ? BoxDecoration(
                   border: Border.all(color: outline),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: _circularRadius(context, 6),
                 )
               : null,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: _circularRadius(context, 4),
             child: CachedNetworkImage(imageUrl: faviconUrl, fit: BoxFit.cover),
           ),
         );
       } else if (iconName != null && iconName.isNotEmpty) {
         final icon = _iconFromName(iconName);
         if (icon != null) {
-          leading = Icon(icon, size: 18, color: theme.colorScheme.primary);
+          leading = Icon(
+            icon,
+            size: spacing.md + spacing.xxxs,
+            color: theme.colorScheme.primary,
+          );
         }
       }
 
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: spacing.sm + spacing.xxxs,
+          vertical: spacing.sm - spacing.xxxs,
+        ),
         decoration: BoxDecoration(
           color: badgeColor,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: _circularRadius(context, 14),
           border: Border.all(color: outline),
         ),
         child: Row(
@@ -4387,7 +4632,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           children: [
             if (leading != null) ...[
               leading,
-              const SizedBox(width: 8),
+              SizedBox(width: spacing.xs),
             ],
             Flexible(
               child: Text(
@@ -4571,16 +4816,19 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       return const SizedBox.shrink();
     }
     final theme = Theme.of(context);
+    final palette = _chatThemeOf(context).palette;
     final textTheme = theme.textTheme;
+    final onOverlay = theme.colorScheme.onPrimary;
+    final subtle = onOverlay.withValues(alpha: 0.7);
 
     final content = <Widget>[];
     if (slide.badge != null && slide.badge!.isNotEmpty) {
       content.add(
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: _spacingSymmetric(context, horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withOpacity(0.14),
-            borderRadius: BorderRadius.circular(999),
+            color: theme.colorScheme.primary.withValues(alpha: 0.14),
+            borderRadius: _circularRadius(context, 999),
           ),
           child: Text(
             slide.badge!,
@@ -4599,7 +4847,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         Text(
           slide.title!,
           style: textTheme.titleMedium?.copyWith(
-            color: Colors.white,
+            color: onOverlay,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -4609,10 +4857,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     if (slide.subtitle != null && slide.subtitle!.isNotEmpty) {
       content.add(
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: _spacingOnly(context, top: 4),
           child: Text(
             slide.subtitle!,
-            style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+            style: textTheme.bodyMedium?.copyWith(color: subtle),
           ),
         ),
       );
@@ -4621,10 +4869,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     if (slide.description != null && slide.description!.isNotEmpty) {
       content.add(
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: _spacingOnly(context, top: 8),
           child: Text(
             slide.description!,
-            style: textTheme.bodySmall?.copyWith(color: Colors.white70),
+            style: textTheme.bodySmall?.copyWith(color: subtle),
           ),
         ),
       );
@@ -4633,7 +4881,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     if (slide.tags.isNotEmpty) {
       content.add(
         Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: _spacingOnly(context, top: 12),
           child: Wrap(
             spacing: 8,
             runSpacing: 6,
@@ -4641,15 +4889,15 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
               for (final tag in slide.tags)
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      _spacingSymmetric(context, horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(999),
+                    color: onOverlay.withValues(alpha: 0.12),
+                    borderRadius: _circularRadius(context, 999),
                   ),
                   child: Text(
                     tag,
                     style: textTheme.labelSmall?.copyWith(
-                      color: Colors.white,
+                      color: onOverlay,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -4661,10 +4909,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: _spacingAll(context, 16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.65),
-        borderRadius: BorderRadius.circular(16),
+        color: palette.overlayStrong.withValues(alpha: 0.75),
+        borderRadius: _circularRadius(context, 16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4700,7 +4948,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     if (text != null && text.isNotEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: _spacingAll(context, 24),
           child: Text(
             text,
             textAlign: TextAlign.center,
@@ -5067,6 +5315,107 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     return spaced;
   }
 
+  EdgeInsets _spacingOnly(
+    BuildContext context, {
+    double left = 0,
+    double top = 0,
+    double right = 0,
+    double bottom = 0,
+  }) {
+    return EdgeInsets.only(
+      left: _resolveSpacingValue(context, left),
+      top: _resolveSpacingValue(context, top),
+      right: _resolveSpacingValue(context, right),
+      bottom: _resolveSpacingValue(context, bottom),
+    );
+  }
+
+  EdgeInsets _spacingSymmetric(
+    BuildContext context, {
+    double horizontal = 0,
+    double vertical = 0,
+  }) {
+    return EdgeInsets.symmetric(
+      horizontal: _resolveSpacingValue(context, horizontal),
+      vertical: _resolveSpacingValue(context, vertical),
+    );
+  }
+
+  EdgeInsets _spacingAll(BuildContext context, double value) {
+    return EdgeInsets.all(_resolveSpacingValue(context, value));
+  }
+
+  EdgeInsets _spacingFromLTRB(
+    BuildContext context,
+    double left,
+    double top,
+    double right,
+    double bottom,
+  ) {
+    return EdgeInsets.fromLTRB(
+      _resolveSpacingValue(context, left),
+      _resolveSpacingValue(context, top),
+      _resolveSpacingValue(context, right),
+      _resolveSpacingValue(context, bottom),
+    );
+  }
+
+  double _resolveSpacingValue(BuildContext context, double value) {
+    if (value == 0) return 0;
+    final spacing = ChatKitTheme.of(context).spacing;
+    final resolver = _spacingTokenResolvers[value.round()];
+    if (resolver != null) {
+      return resolver(spacing);
+    }
+    return value;
+  }
+
+  double _resolveRadiusValue(ChatKitThemeData theme, double value) {
+    if (value == 0) return 0;
+    final resolver = _radiusTokenResolvers[value.round()];
+    if (resolver != null) {
+      return resolver(theme.radii);
+    }
+    return value;
+  }
+
+  BorderRadius _circularRadius(BuildContext context, double value) {
+    final theme = ChatKitTheme.of(context);
+    return BorderRadius.circular(_resolveRadiusValue(theme, value));
+  }
+
+  static final Map<int, double Function(ChatKitSpacing)>
+      _spacingTokenResolvers = <int, double Function(ChatKitSpacing)>{
+    2: (s) => s.xxxs,
+    4: (s) => s.xxs,
+    6: (s) => s.xs - s.xxxs,
+    8: (s) => s.xs,
+    10: (s) => s.sm - s.xxxs,
+    12: (s) => s.sm,
+    14: (s) => s.sm + s.xxxs,
+    16: (s) => s.md,
+    18: (s) => s.md + s.xxxs,
+    20: (s) => s.lg,
+    24: (s) => s.xl,
+    28: (s) => s.xl + (s.sm - s.xxxs),
+    32: (s) => s.xxl,
+    36: (s) => s.xxxl - s.sm,
+    40: (s) => s.xxxl,
+  };
+
+  static final Map<int, double Function(ChatKitRadii)> _radiusTokenResolvers =
+      <int, double Function(ChatKitRadii)>{
+    4: (r) => r.sm,
+    6: (r) => r.md,
+    8: (r) => r.lg,
+    10: (r) => r.button,
+    12: (r) => r.card,
+    14: (r) => r.card + (r.sm / 2),
+    16: (r) => r.card + (r.md / 2),
+    20: (r) => r.icon,
+    999: (r) => r.full,
+  };
+
   double? _spacingToDouble(Object? raw) {
     if (raw == null) return null;
     if (raw is num) {
@@ -5201,7 +5550,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         return BorderRadius.zero;
       }
       if (normalized == 'full' || normalized == '100%') {
-        return BorderRadius.circular(999);
+        return _circularRadius(context, 999);
       }
       final value = _spacingToDouble(raw);
       if (value != null) {
@@ -5329,8 +5678,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     required Widget child,
     bool applyMargin = true,
   }) {
-    final padding = _edgeInsets(component['padding']);
-    final marginValue = _edgeInsets(component['margin']);
+    final padding = _edgeInsets(component['padding'], context);
+    final marginValue = _edgeInsets(component['margin'], context);
     final background = _colorFromToken(context, component['background']);
     final border = _borderFrom(context, component['border']);
     final borderRadius = _borderRadiusFrom(component['radius']);
@@ -5418,10 +5767,10 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     return const [];
   }
 
-  EdgeInsetsGeometry? _edgeInsets(Object? value) {
+  EdgeInsetsGeometry? _edgeInsets(Object? value, BuildContext context) {
     final uniform = _spacingToDouble(value);
     if (uniform != null) {
-      return EdgeInsets.all(uniform);
+      return _spacingAll(context, uniform);
     }
     if (value is Map<String, Object?>) {
       final horizontal = _spacingToDouble(value['x']);
@@ -5430,12 +5779,7 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       final bottom = _spacingToDouble(value['bottom']) ?? vertical ?? 0;
       final left = _spacingToDouble(value['left']) ?? horizontal ?? 0;
       final right = _spacingToDouble(value['right']) ?? horizontal ?? 0;
-      return EdgeInsets.only(
-        top: top,
-        right: right,
-        bottom: bottom,
-        left: left,
-      );
+      return _spacingFromLTRB(context, left, top, right, bottom);
     }
     return null;
   }
@@ -5504,11 +5848,11 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       final wantsList = nextSegment?.isList ?? false;
       final existing = container[key];
       if (wantsList) {
-        var list = existing is List<Object?> ? existing : <Object?>[];
+        final list = existing is List<Object?> ? existing : <Object?>[];
         container[key] = list;
         _assignFormValue(list, path, index + 1, value);
       } else {
-        var map =
+        final map =
             existing is Map<String, Object?> ? existing : <String, Object?>{};
         container[key] = map;
         _assignFormValue(map, path, index + 1, value);
@@ -6130,49 +6474,55 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       if (normalized.startsWith('#')) {
         return _parseHexColor(normalized);
       }
+
+      final theme = Theme.of(context);
+      final palette = _chatThemeOf(context).palette;
+
       switch (normalized) {
         case 'primary':
-          return Theme.of(context).colorScheme.primary;
+          return theme.colorScheme.primary;
         case 'onprimary':
-          return Theme.of(context).colorScheme.onPrimary;
+          return theme.colorScheme.onPrimary;
         case 'secondary':
-          return Theme.of(context).colorScheme.secondary;
+          return theme.colorScheme.secondary;
         case 'onsecondary':
-          return Theme.of(context).colorScheme.onSecondary;
+          return theme.colorScheme.onSecondary;
         case 'surface':
-          return Theme.of(context).colorScheme.surface;
+          return theme.colorScheme.surface;
         case 'onsurface':
-          return Theme.of(context).colorScheme.onSurface;
+          return theme.colorScheme.onSurface;
+        case 'background':
+          return theme.colorScheme.background;
+        case 'onsurfacevariant':
+        case 'muted':
+          return palette.onSurfaceMuted;
         case 'success':
-          return Colors.green;
+          return ChatKitStyles.statusColor(context, 'success');
         case 'danger':
         case 'error':
-          return Colors.redAccent;
+          return ChatKitStyles.statusColor(context, 'danger');
         case 'warning':
         case 'caution':
-          return Colors.amber;
+          return ChatKitStyles.statusColor(context, 'warning');
         case 'info':
-          return Colors.blueAccent;
+          return ChatKitStyles.statusColor(context, 'info');
         case 'discovery':
-          return Colors.purpleAccent;
+          return theme.colorScheme.secondary;
       }
 
       final shadeMatch =
           RegExp(r'([a-z]+)[-_](\d{2,3})').firstMatch(normalized);
       if (shadeMatch != null) {
         final base = shadeMatch.group(1)!;
-        final shadeValue = int.tryParse(shadeMatch.group(2)!);
-        if (shadeValue != null) {
-          final swatch = _materialColorFor(base);
-          if (swatch != null) {
-            return swatch[shadeValue] ?? swatch;
-          }
+        final named = _namedColor(base);
+        if (named != null) {
+          return named;
         }
       }
 
-      final swatch = _materialColorFor(normalized);
-      if (swatch != null) {
-        return swatch;
+      final named = _namedColor(normalized);
+      if (named != null) {
+        return named;
       }
 
       return _parseHexColor(normalized);
@@ -6202,172 +6552,98 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     return Color(intValue);
   }
 
-  MaterialColor? _materialColorFor(String name) {
-    switch (name) {
-      case 'red':
-        return Colors.red;
-      case 'pink':
-        return Colors.pink;
-      case 'purple':
-        return Colors.purple;
-      case 'deep-purple':
-      case 'deeppurple':
-        return Colors.deepPurple;
-      case 'indigo':
-        return Colors.indigo;
-      case 'blue':
-        return Colors.blue;
-      case 'light-blue':
-      case 'lightblue':
-        return Colors.lightBlue;
-      case 'cyan':
-        return Colors.cyan;
-      case 'teal':
-        return Colors.teal;
-      case 'green':
-        return Colors.green;
-      case 'light-green':
-      case 'lightgreen':
-        return Colors.lightGreen;
-      case 'lime':
-        return Colors.lime;
-      case 'yellow':
-        return Colors.yellow;
-      case 'amber':
-        return Colors.amber;
-      case 'orange':
-        return Colors.orange;
-      case 'deep-orange':
-      case 'deeporange':
-        return Colors.deepOrange;
-      case 'brown':
-        return Colors.brown;
-      case 'blue-grey':
-      case 'bluegray':
-      case 'bluegrey':
-        return Colors.blueGrey;
-      case 'grey':
-      case 'gray':
-        return Colors.grey;
+  Color? _namedColor(String name) {
+    final hex = _namedColorHex[name];
+    if (hex == null) {
+      return null;
     }
-    return null;
+    return Color(hex);
   }
+
+  static const Map<String, int> _namedColorHex = {
+    'red': 0xFFE5484D,
+    'pink': 0xFFEA4AAA,
+    'purple': 0xFF7A5AF8,
+    'deep-purple': 0xFF6941C6,
+    'deeppurple': 0xFF6941C6,
+    'indigo': 0xFF444CE7,
+    'blue': 0xFF1570EF,
+    'light-blue': 0xFF2E90FA,
+    'lightblue': 0xFF2E90FA,
+    'cyan': 0xFF0BA5EC,
+    'teal': 0xFF12A594,
+    'green': 0xFF12B76A,
+    'light-green': 0xFF32D583,
+    'lightgreen': 0xFF32D583,
+    'lime': 0xFFA6F4C5,
+    'yellow': 0xFFFEC84B,
+    'amber': 0xFFF79009,
+    'orange': 0xFFF97066,
+    'deep-orange': 0xFFEF6820,
+    'deeporange': 0xFFEF6820,
+    'brown': 0xFF9B8A7B,
+    'blue-grey': 0xFF5F6C7B,
+    'bluegray': 0xFF5F6C7B,
+    'bluegrey': 0xFF5F6C7B,
+    'grey': 0xFF98A2B3,
+    'gray': 0xFF98A2B3,
+    'black': 0xFF101828,
+    'white': 0xFFFFFFFF,
+  };
 
   IconData? _iconFromName(String? name) {
     if (name == null || name.isEmpty) return null;
+    final icon = ChatKitIcons.forHeader(name) ?? ChatKitIcons.forWidget(name);
+    if (icon != null) {
+      return icon;
+    }
     switch (name) {
-      case 'analytics':
-        return Icons.analytics;
-      case 'atom':
-        return Icons.ac_unit;
-      case 'bolt':
-        return Icons.bolt;
-      case 'book-open':
-        return Icons.menu_book;
+      case 'bell':
+        return Icons.notifications_outlined;
       case 'book-clock':
-        return Icons.book_online;
-      case 'book-closed':
-        return Icons.book;
-      case 'calendar':
-        return Icons.calendar_today;
-      case 'chart':
-        return Icons.bar_chart;
+        return Icons.auto_stories_outlined;
       case 'check':
         return Icons.check;
       case 'check-circle':
         return Icons.check_circle_outline;
       case 'check-circle-filled':
         return Icons.check_circle;
-      case 'chevron-left':
-        return Icons.chevron_left;
-      case 'chevron-right':
-        return Icons.chevron_right;
-      case 'circle-question':
-        return Icons.help_outline;
-      case 'compass':
-        return Icons.explore;
-      case 'confetti':
-        return Icons.celebration;
-      case 'cube':
-        return Icons.all_inbox;
+      case 'copy':
+        return Icons.copy;
+      case 'delete':
+        return Icons.delete_outline;
       case 'desktop':
         return Icons.desktop_windows;
       case 'document':
-        return Icons.description;
+        return Icons.description_outlined;
       case 'dot':
         return Icons.circle;
-      case 'dots-horizontal':
-        return Icons.more_horiz;
-      case 'dots-vertical':
-        return Icons.more_vert;
-      case 'empty-circle':
-        return Icons.circle_outlined;
       case 'external-link':
         return Icons.open_in_new;
       case 'globe':
         return Icons.public;
-      case 'keys':
-        return Icons.vpn_key;
-      case 'lab':
-        return Icons.science;
-      case 'images':
-        return Icons.photo_library;
-      case 'info':
-        return Icons.info_outline;
-      case 'lifesaver':
-        return Icons.support;
-      case 'lightbulb':
-        return Icons.lightbulb_outline;
       case 'mail':
         return Icons.mail_outline;
-      case 'map-pin':
-        return Icons.location_pin;
       case 'maps':
-        return Icons.map;
+        return Icons.map_outlined;
       case 'mobile':
         return Icons.smartphone;
-      case 'notebook':
-        return Icons.note;
-      case 'notebook-pencil':
-        return Icons.edit_note;
-      case 'page-blank':
-        return Icons.article_outlined;
       case 'phone':
-        return Icons.phone;
+        return Icons.phone_outlined;
+      case 'share':
+        return Icons.share_outlined;
       case 'play':
         return Icons.play_arrow;
       case 'plus':
         return Icons.add;
-      case 'profile':
-        return Icons.person_outline;
-      case 'profile-card':
-        return Icons.badge_outlined;
       case 'reload':
         return Icons.refresh;
-      case 'star':
-        return Icons.star_border;
-      case 'star-filled':
-        return Icons.star;
-      case 'search':
-        return Icons.search;
-      case 'sparkle':
-        return Icons.auto_awesome;
-      case 'sparkle-double':
-        return Icons.auto_awesome_mosaic;
-      case 'square-code':
-        return Icons.code;
-      case 'square-image':
-        return Icons.image;
-      case 'square-text':
-        return Icons.note_outlined;
-      case 'suitcase':
-        return Icons.work_outline;
       case 'settings-slider':
         return Icons.tune;
       case 'user':
-        return Icons.person;
+        return Icons.person_outline;
     }
-    return null;
+    return Icons.extension_outlined;
   }
 
   PageController _pageControllerFor(
@@ -6388,15 +6664,22 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     );
   }
 
-  SignatureController _signatureControllerFor(String name) {
-    return _signatureControllers.putIfAbsent(
-      name,
-      () => SignatureController(
-        penStrokeWidth: 2,
-        penColor: Colors.black,
-        exportBackgroundColor: Colors.white,
-      ),
+  SignatureController _signatureControllerFor(
+    BuildContext context,
+    String name,
+  ) {
+    final existing = _signatureControllers[name];
+    if (existing != null) {
+      return existing;
+    }
+    final palette = _chatThemeOf(context).palette;
+    final controller = SignatureController(
+      penStrokeWidth: 2,
+      penColor: palette.onSurface,
+      exportBackgroundColor: palette.surface,
     );
+    _signatureControllers[name] = controller;
+    return controller;
   }
 
   Map<String, Object?> castMap(Object? value) {

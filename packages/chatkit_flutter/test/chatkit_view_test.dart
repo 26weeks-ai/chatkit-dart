@@ -2,10 +2,41 @@ import 'package:chatkit_core/chatkit_core.dart';
 import 'package:chatkit_core/src/api/api_client.dart';
 import 'package:chatkit_core/src/utils/json.dart';
 import 'package:chatkit_flutter/chatkit_flutter.dart';
+import 'package:chatkit_flutter/src/theme/chatkit_theme.dart';
 import 'package:chatkit_flutter/src/widgets/widget_renderer.dart';
 import 'package:flutter/material.dart' hide Page;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+Widget _buildRendererHarness({
+  required ChatKitController controller,
+  required Widget body,
+  Color backgroundColor = Colors.white,
+  Brightness brightness = Brightness.light,
+}) {
+  final baseTheme = ThemeData(
+    useMaterial3: true,
+    brightness: brightness,
+  );
+  final chatTheme = ChatKitThemeData.fromOptions(
+    base: baseTheme,
+    option: controller.options.resolvedTheme,
+    platformBrightness: brightness,
+  );
+  return MaterialApp(
+    theme: baseTheme,
+    home: ChatKitTheme(
+      data: chatTheme,
+      child: Theme(
+        data: chatTheme.materialTheme,
+        child: Scaffold(
+          backgroundColor: backgroundColor,
+          body: body,
+        ),
+      ),
+    ),
+  );
+}
 
 void main() {
   testWidgets('ChatKitView renders start screen by default', (tester) async {
@@ -16,20 +47,76 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              height: 600,
-              width: 400,
-              child: ChatKitView(controller: controller),
-            ),
+      _buildRendererHarness(
+        controller: controller,
+        body: Center(
+          child: SizedBox(
+            height: 600,
+            width: 400,
+            child: ChatKitView(controller: controller),
           ),
         ),
       ),
     );
 
     expect(find.text('What can I help with today?'), findsOneWidget);
+    await controller.dispose();
+  });
+
+  testWidgets('Transition widget respects animation configuration',
+      (tester) async {
+    final controller = ChatKitController(
+      const ChatKitOptions(
+        api: CustomApiConfig(url: 'https://example.com'),
+      ),
+    );
+
+    final widgetJson = <String, Object?>{
+      'type': 'Transition',
+      'animation': 'slide',
+      'direction': 'left',
+      'duration': 320,
+      'curve': 'easeInOut',
+      'maintainState': false,
+      'children': {
+        'type': 'Text',
+        'value': 'Animated content',
+      },
+    };
+
+    final item = ThreadItem(
+      id: 'item_transition',
+      threadId: 'thread_transition',
+      createdAt: DateTime(2024),
+      type: 'widget',
+      content: const [],
+      attachments: const <ChatKitAttachment>[],
+      metadata: const {},
+      raw: {'widget': widgetJson},
+    );
+
+    await tester.pumpWidget(
+      _buildRendererHarness(
+        controller: controller,
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: ChatKitWidgetRenderer(
+            widgetJson: widgetJson,
+            controller: controller,
+            item: item,
+          ),
+        ),
+      ),
+    );
+
+    final switcherFinder = find.byType(AnimatedSwitcher);
+    expect(switcherFinder, findsOneWidget);
+    final switcher = tester.widget<AnimatedSwitcher>(switcherFinder);
+    expect(switcher.duration, const Duration(milliseconds: 320));
+    expect(switcher.switchInCurve, Curves.easeInOut);
+    expect(switcher.switchOutCurve, Curves.easeInOut);
+    expect(find.byType(SlideTransition), findsOneWidget);
+
     await controller.dispose();
   });
 
@@ -83,14 +170,13 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              height: 700,
-              width: 900,
-              child: ChatKitView(controller: controller),
-            ),
+      _buildRendererHarness(
+        controller: controller,
+        body: Center(
+          child: SizedBox(
+            height: 700,
+            width: 900,
+            child: ChatKitView(controller: controller),
           ),
         ),
       ),
@@ -156,14 +242,13 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              height: 700,
-              width: 900,
-              child: ChatKitView(controller: controller),
-            ),
+      _buildRendererHarness(
+        controller: controller,
+        body: Center(
+          child: SizedBox(
+            height: 700,
+            width: 900,
+            child: ChatKitView(controller: controller),
           ),
         ),
       ),
@@ -230,10 +315,9 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatKitView(controller: controller),
-        ),
+      _buildRendererHarness(
+        controller: controller,
+        body: ChatKitView(controller: controller),
       ),
     );
 
@@ -308,10 +392,9 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatKitView(controller: controller),
-        ),
+      _buildRendererHarness(
+        controller: controller,
+        body: ChatKitView(controller: controller),
       ),
     );
 
@@ -404,15 +487,14 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: ChatKitWidgetRenderer(
-              widgetJson: widgetJson,
-              controller: controller,
-              item: item,
-            ),
+      _buildRendererHarness(
+        controller: controller,
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: ChatKitWidgetRenderer(
+            widgetJson: widgetJson,
+            controller: controller,
+            item: item,
           ),
         ),
       ),
@@ -474,8 +556,9 @@ void main() {
     });
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: ChatKitView(controller: controller),
+      _buildRendererHarness(
+        controller: controller,
+        body: ChatKitView(controller: controller),
       ),
     );
 

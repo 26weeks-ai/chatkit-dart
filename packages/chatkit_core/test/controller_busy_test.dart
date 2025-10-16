@@ -24,8 +24,8 @@ void main() {
       ];
       final apiClient = _RecordingApiClient(responses);
       final controller = ChatKitController(
-        ChatKitOptions(
-          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        const ChatKitOptions(
+          api: CustomApiConfig(url: 'https://example.com/chat'),
         ),
         apiClient: apiClient,
       );
@@ -51,8 +51,8 @@ void main() {
     test('setThreadId throws ChatKitBusyException while streaming', () async {
       final apiClient = _BlockingApiClient();
       final controller = ChatKitController(
-        ChatKitOptions(
-          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        const ChatKitOptions(
+          api: CustomApiConfig(url: 'https://example.com/chat'),
         ),
         apiClient: apiClient,
       );
@@ -73,8 +73,8 @@ void main() {
     test('composer state clears immediately after sendUserMessage', () async {
       final apiClient = _BlockingApiClient();
       final controller = ChatKitController(
-        ChatKitOptions(
-          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        const ChatKitOptions(
+          api: CustomApiConfig(url: 'https://example.com/chat'),
         ),
         apiClient: apiClient,
       );
@@ -93,8 +93,8 @@ void main() {
 
     test('backgrounding prevents new streaming requests', () async {
       final controller = ChatKitController(
-        ChatKitOptions(
-          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        const ChatKitOptions(
+          api: CustomApiConfig(url: 'https://example.com/chat'),
         ),
         apiClient: _RecordingApiClient(const []),
       );
@@ -120,8 +120,8 @@ void main() {
       ];
       final apiClient = _RecordingApiClient(responses);
       final controller = ChatKitController(
-        ChatKitOptions(
-          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        const ChatKitOptions(
+          api: CustomApiConfig(url: 'https://example.com/chat'),
         ),
         apiClient: apiClient,
       );
@@ -155,8 +155,8 @@ void main() {
     test('backgrounding cancels active stream via api client', () async {
       final apiClient = _CancelableApiClient();
       final controller = ChatKitController(
-        ChatKitOptions(
-          api: const CustomApiConfig(url: 'https://example.com/chat'),
+        const ChatKitOptions(
+          api: CustomApiConfig(url: 'https://example.com/chat'),
         ),
         apiClient: apiClient,
       );

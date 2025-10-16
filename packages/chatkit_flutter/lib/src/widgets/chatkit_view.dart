@@ -15,7 +15,120 @@ import 'package:share_plus/share_plus.dart';
 
 import '../localization/localizations.dart';
 import '../widgets/widget_renderer.dart';
+import '../theme/chatkit_theme.dart';
+import '../theme/icons.dart';
 import '../theme/tokens.dart';
+
+double _spacingValue(BuildContext context, double value) {
+  if (value == 0) return 0;
+  final spacing = _maybeChatTheme(context)?.spacing;
+  if (spacing == null) {
+    return value;
+  }
+  switch (value.round()) {
+    case 2:
+      return spacing.xxxs;
+    case 4:
+      return spacing.xxs;
+    case 6:
+      return spacing.xs - spacing.xxxs;
+    case 8:
+      return spacing.xs;
+    case 10:
+      return spacing.sm - spacing.xxxs;
+    case 12:
+      return spacing.sm;
+    case 16:
+      return spacing.md;
+    case 20:
+      return spacing.lg;
+    case 24:
+      return spacing.xl;
+    case 32:
+      return spacing.xxl;
+    default:
+      return value;
+  }
+}
+
+EdgeInsets _spacingOnly(
+  BuildContext context, {
+  double left = 0,
+  double top = 0,
+  double right = 0,
+  double bottom = 0,
+}) {
+  return EdgeInsets.only(
+    left: _spacingValue(context, left),
+    top: _spacingValue(context, top),
+    right: _spacingValue(context, right),
+    bottom: _spacingValue(context, bottom),
+  );
+}
+
+EdgeInsets _spacingSymmetric(
+  BuildContext context, {
+  double horizontal = 0,
+  double vertical = 0,
+}) {
+  return EdgeInsets.symmetric(
+    horizontal: _spacingValue(context, horizontal),
+    vertical: _spacingValue(context, vertical),
+  );
+}
+
+EdgeInsets _spacingAll(BuildContext context, double value) =>
+    EdgeInsets.all(_spacingValue(context, value));
+
+EdgeInsets _spacingFromLTRB(
+  BuildContext context,
+  double left,
+  double top,
+  double right,
+  double bottom,
+) {
+  return EdgeInsets.fromLTRB(
+    _spacingValue(context, left),
+    _spacingValue(context, top),
+    _spacingValue(context, right),
+    _spacingValue(context, bottom),
+  );
+}
+
+BorderRadius _radius(BuildContext context, double value) {
+  final radii = _maybeChatTheme(context)?.radii;
+  if (radii == null) {
+    return BorderRadius.circular(value);
+  }
+  switch (value.round()) {
+    case 6:
+      return BorderRadius.circular(radii.sm);
+    case 8:
+      return BorderRadius.circular(radii.lg);
+    case 10:
+      return BorderRadius.circular(radii.button);
+    case 12:
+      return BorderRadius.circular(radii.card);
+    case 16:
+      return BorderRadius.circular(radii.composer);
+    case 20:
+      return BorderRadius.circular(radii.icon);
+    case 999:
+      return BorderRadius.circular(radii.full);
+    default:
+      return BorderRadius.circular(value);
+  }
+}
+
+ChatKitThemeData? _maybeChatTheme(BuildContext context) {
+  final element =
+      context.getElementForInheritedWidgetOfExactType<ChatKitTheme>();
+  if (element == null) {
+    return null;
+  }
+  final widget = element.widget;
+  return widget is ChatKitTheme ? widget.data : null;
+}
 
 class ChatKitView extends StatefulWidget {
   const ChatKitView({
@@ -109,6 +222,108 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
       _refreshHistory();
     }
     _ensureLocaleBundle();
+  }
+
+  double _spacingValue(BuildContext context, double value) {
+    if (value == 0) return 0;
+    final spacing = _maybeChatTheme(context)?.spacing;
+    if (spacing == null) {
+      return value;
+    }
+    switch (value.round()) {
+      case 2:
+        return spacing.xxxs;
+      case 4:
+        return spacing.xxs;
+      case 6:
+        return spacing.xs - spacing.xxxs;
+      case 8:
+        return spacing.xs;
+      case 10:
+        return spacing.sm - spacing.xxxs;
+      case 12:
+        return spacing.sm;
+      case 16:
+        return spacing.md;
+      case 20:
+        return spacing.lg;
+      case 24:
+        return spacing.xl;
+      case 32:
+        return spacing.xxl;
+      default:
+        return value;
+    }
+  }
+
+  EdgeInsets _spacingOnly(
+    BuildContext context, {
+    double left = 0,
+    double top = 0,
+    double right = 0,
+    double bottom = 0,
+  }) {
+    return EdgeInsets.only(
+      left: _spacingValue(context, left),
+      top: _spacingValue(context, top),
+      right: _spacingValue(context, right),
+      bottom: _spacingValue(context, bottom),
+    );
+  }
+
+  EdgeInsets _spacingSymmetric(
+    BuildContext context, {
+    double horizontal = 0,
+    double vertical = 0,
+  }) {
+    return EdgeInsets.symmetric(
+      horizontal: _spacingValue(context, horizontal),
+      vertical: _spacingValue(context, vertical),
+    );
+  }
+
+  EdgeInsets _spacingAll(BuildContext context, double value) {
+    return EdgeInsets.all(_spacingValue(context, value));
+  }
+
+  EdgeInsets _spacingFromLTRB(
+    BuildContext context,
+    double left,
+    double top,
+    double right,
+    double bottom,
+  ) {
+    return EdgeInsets.fromLTRB(
+      _spacingValue(context, left),
+      _spacingValue(context, top),
+      _spacingValue(context, right),
+      _spacingValue(context, bottom),
+    );
+  }
+
+  BorderRadius _radius(BuildContext context, double value) {
+    final radii = _maybeChatTheme(context)?.radii;
+    if (radii == null) {
+      return BorderRadius.circular(value);
+    }
+    switch (value.round()) {
+      case 6:
+        return BorderRadius.circular(radii.sm);
+      case 8:
+        return BorderRadius.circular(radii.lg);
+      case 10:
+        return BorderRadius.circular(radii.button);
+      case 12:
+        return BorderRadius.circular(radii.card);
+      case 16:
+        return BorderRadius.circular(radii.composer);
+      case 20:
+        return BorderRadius.circular(radii.icon);
+      case 999:
+        return BorderRadius.circular(radii.full);
+      default:
+        return BorderRadius.circular(value);
+    }
   }
 
   @override
@@ -800,7 +1015,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
           offset: const Offset(0, 6),
           child: Material(
             elevation: 8,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: _radius(context, 12),
             clipBehavior: Clip.antiAlias,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 360),
@@ -814,7 +1029,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                     ),
                   if (!loading && suggestions.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: _spacingAll(context, 16),
                       child: Text(
                         l10n.t('tag_suggestions_empty'),
                         style: theme.textTheme.bodyMedium,
@@ -830,6 +1045,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                         itemBuilder: (context, index) {
                           final suggestion = suggestions[index];
                           final selected = index == _tagSuggestionIndex;
+                          final palette = ChatKitTheme.of(context).palette;
                           final labelStyle =
                               theme.textTheme.bodyMedium?.copyWith(
                             color: selected
@@ -844,8 +1060,9 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                               color: selected
                                   ? theme.colorScheme.primary
                                       .withValues(alpha: 0.08)
-                                  : Colors.transparent,
-                              padding: const EdgeInsets.symmetric(
+                                  : palette.transparent,
+                              padding: _spacingSymmetric(
+                                context,
                                 horizontal: 16,
                                 vertical: 12,
                               ),
@@ -856,7 +1073,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                                   if (description != null &&
                                       description.isNotEmpty)
                                     Padding(
-                                      padding: const EdgeInsets.only(top: 2),
+                                      padding: _spacingOnly(context, top: 2),
                                       child: Text(
                                         description,
                                         style:
@@ -878,7 +1095,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                     ),
                   if (loading && suggestions.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: _spacingAll(context, 16),
                       child: Text(
                         l10n.t('tag_suggestions_loading'),
                         style: theme.textTheme.bodySmall,
@@ -917,7 +1134,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
         final theme = Theme.of(context);
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            padding: _spacingFromLTRB(context, 16, 12, 16, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -926,14 +1143,14 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                   l10n.t('share_sheet_title'),
                   style: theme.textTheme.titleMedium,
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: _spacingValue(context, 12)),
                 if (shareText.length > 200)
                   Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
+                    margin: _spacingOnly(context, bottom: 12),
+                    padding: _spacingAll(context, 12),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: _radius(context, 12),
                     ),
                     child: Text(
                       '${shareText.substring(0, 200)}…',
@@ -942,11 +1159,11 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                   )
                 else
                   Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
+                    margin: _spacingOnly(context, bottom: 12),
+                    padding: _spacingAll(context, 12),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: _radius(context, 12),
                     ),
                     child: Text(
                       shareText,
@@ -1773,7 +1990,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                         },
                         onSubmitted: (_) => runSearch(setModalState),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: _spacingValue(context, 12)),
                       if (loading)
                         const Padding(
                           padding: EdgeInsets.all(16),
@@ -1810,9 +2027,10 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                                         waitDuration:
                                             const Duration(milliseconds: 400),
                                         child: ListTile(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 12, vertical: 8),
+                                          contentPadding: _spacingSymmetric(
+                                              context,
+                                              horizontal: 12,
+                                              vertical: 8),
                                           leading: buildAvatar(entity, theme),
                                           selected: selected,
                                           selectedTileColor: theme
@@ -2576,251 +2794,21 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
   }
 
   Widget _wrapWithChatKitTheme(BuildContext context, Widget child) {
-    final themeOption = controller.options.resolvedTheme;
-    if (themeOption == null) {
-      return child;
-    }
-    final themeData = _resolveTheme(context, themeOption);
-    return Theme(data: themeData, child: child);
-  }
-
-  ThemeData _resolveTheme(BuildContext context, ThemeOption option) {
-    ThemeData base;
-    switch (option.colorScheme) {
-      case ColorSchemeOption.dark:
-        base = ThemeData.dark();
-        break;
-      case ColorSchemeOption.light:
-        base = ThemeData.light();
-        break;
-      case ColorSchemeOption.system:
-        final brightness = MediaQuery.platformBrightnessOf(context);
-        base = brightness == Brightness.dark
-            ? ThemeData.dark()
-            : ThemeData.light();
-        break;
-      case null:
-        base = Theme.of(context);
-        break;
-    }
-
-    var scheme = base.colorScheme;
-    final accent = option.color?.accent;
-    if (accent != null) {
-      scheme = scheme.copyWith(
-        primary: _parseColor(accent.primary) ?? scheme.primary,
-        onPrimary: _parseColor(accent.onPrimary) ?? scheme.onPrimary,
-        secondary: _parseColor(accent.secondary) ?? scheme.secondary,
-        onSecondary: _parseColor(accent.onSecondary) ?? scheme.onSecondary,
-      );
-    }
-
-    final surface = option.color?.surface;
-    Color? scaffoldBackground;
-    Color? canvasColor;
-    if (surface != null) {
-      final primarySurface = _parseColor(surface.primary);
-      final secondarySurface = _parseColor(surface.secondary);
-      final tertiarySurface = _parseColor(surface.tertiary);
-      final quaternarySurface = _parseColor(surface.quaternary);
-      scheme = scheme.copyWith(
-        surface: primarySurface ?? scheme.surface,
-        surfaceTint: secondarySurface ?? scheme.surfaceTint,
-      );
-      scaffoldBackground = tertiarySurface ?? primarySurface;
-      canvasColor = quaternarySurface;
-    }
-
-    var theme = base.copyWith(colorScheme: scheme);
-    if (scaffoldBackground != null || canvasColor != null) {
-      theme = theme.copyWith(
-        scaffoldBackgroundColor:
-            scaffoldBackground ?? theme.scaffoldBackgroundColor,
-        canvasColor: canvasColor ?? theme.canvasColor,
-      );
-    }
-
-    var textTheme = theme.textTheme;
-    var primaryTextTheme = theme.primaryTextTheme;
-
-    final grayscale = option.color?.grayscale;
-    if (grayscale != null) {
-      final displayColor = _parseColor(grayscale.label0);
-      final bodyColor = _parseColor(grayscale.label1);
-      textTheme = textTheme.apply(
-        displayColor: displayColor,
-        bodyColor: bodyColor,
-      );
-      primaryTextTheme = primaryTextTheme.apply(
-        displayColor: displayColor,
-        bodyColor: bodyColor,
-      );
-      final background = _parseColor(grayscale.background);
-      if (background != null) {
-        theme = theme.copyWith(scaffoldBackgroundColor: background);
-      }
-      final borderColor = _parseColor(grayscale.border);
-      if (borderColor != null) {
-        theme = theme.copyWith(dividerColor: borderColor);
-      }
-      final shadowColor = _parseColor(grayscale.shadow);
-      if (shadowColor != null) {
-        theme = theme.copyWith(shadowColor: shadowColor);
-      }
-    }
-
-    final typography = option.typography;
-    if (typography != null) {
-      textTheme = textTheme.apply(fontFamily: typography.fontFamily);
-      primaryTextTheme =
-          primaryTextTheme.apply(fontFamily: typography.fontFamily);
-    }
-
-    theme = theme.copyWith(
-      textTheme: textTheme,
-      primaryTextTheme: primaryTextTheme,
+    final baseTheme = Theme.of(context);
+    final brightness =
+        MediaQuery.maybeOf(context)?.platformBrightness ?? baseTheme.brightness;
+    final chatTheme = ChatKitThemeData.fromOptions(
+      base: baseTheme,
+      option: controller.options.resolvedTheme,
+      platformBrightness: brightness,
     );
-
-    final radiusValue = option.shapes?.radius;
-    if (radiusValue != null) {
-      final borderRadius = BorderRadius.circular(radiusValue);
-      final buttonShape = RoundedRectangleBorder(borderRadius: borderRadius);
-      theme = theme.copyWith(
-        cardTheme: theme.cardTheme.copyWith(
-          shape: RoundedRectangleBorder(borderRadius: borderRadius),
-        ),
-        dialogTheme: theme.dialogTheme.copyWith(
-          shape: RoundedRectangleBorder(borderRadius: borderRadius),
-        ),
-        bottomSheetTheme: theme.bottomSheetTheme.copyWith(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(radiusValue),
-            ),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: _withShape(theme.elevatedButtonTheme.style, buttonShape),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: _withShape(theme.filledButtonTheme.style, buttonShape),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: _withShape(theme.outlinedButtonTheme.style, buttonShape),
-        ),
-        chipTheme: theme.chipTheme.copyWith(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusValue / 2),
-          ),
-        ),
-      );
-    }
-
-    if (option.elevations?.surface != null) {
-      theme = theme.copyWith(
-        cardTheme: theme.cardTheme.copyWith(
-          elevation: option.elevations?.surface,
-        ),
-        dialogTheme: theme.dialogTheme.copyWith(
-          elevation: option.elevations?.surface,
-        ),
-      );
-    }
-
-    final gradient =
-        _buildGradient(option.backgroundGradient ?? option.color?.gradients);
-
-    final tokens = ChatKitThemeTokens(
-      backgroundGradient: gradient,
-      surfaceElevation: option.elevations?.surface,
-      historyElevation: option.elevations?.history,
-      historyStyle: _componentStyleFromOptions(
-        option.components?.history,
-        option.elevations?.history,
-      ),
-      composerStyle: _componentStyleFromOptions(
-        option.components?.composer,
-        option.elevations?.composer,
-      ),
-      assistantBubbleStyle: _componentStyleFromOptions(
-        option.components?.assistantBubble,
-        option.elevations?.assistantBubble,
-      ),
-      userBubbleStyle: _componentStyleFromOptions(
-        option.components?.userBubble,
-        option.elevations?.userBubble,
+    return ChatKitTheme(
+      data: chatTheme,
+      child: Theme(
+        data: chatTheme.materialTheme,
+        child: child,
       ),
     );
-
-    final existingExtensions = theme.extensions.values.toList();
-    theme = theme.copyWith(
-      extensions: [
-        ...existingExtensions,
-        tokens,
-      ],
-    );
-
-    return theme;
-  }
-
-  Gradient? _buildGradient(ThemeGradientOptions? options) {
-    if (options == null || options.colors.isEmpty) {
-      return null;
-    }
-    final colors = options.colors
-        .map(_parseColor)
-        .whereType<Color>()
-        .toList(growable: false);
-    if (colors.length < 2) {
-      return null;
-    }
-    final angle = (options.angle ?? 0) * math.pi / 180;
-    final dx = math.cos(angle);
-    final dy = math.sin(angle);
-    final begin = Alignment(-dx, -dy);
-    final end = Alignment(dx, dy);
-    return LinearGradient(
-      colors: colors,
-      begin: begin,
-      end: end,
-    );
-  }
-
-  ComponentStyleToken? _componentStyleFromOptions(
-    ThemeComponentStyle? style,
-    double? fallbackElevation,
-  ) {
-    if (style == null && fallbackElevation == null) {
-      return null;
-    }
-    return ComponentStyleToken(
-      backgroundColor: _parseColor(style?.background),
-      textColor: _parseColor(style?.text),
-      borderColor: _parseColor(style?.border),
-      elevation: style?.elevation ?? fallbackElevation,
-      radius: style?.radius,
-    );
-  }
-
-  ButtonStyle _withShape(ButtonStyle? style, OutlinedBorder shape) {
-    return (style ?? const ButtonStyle()).copyWith(
-      shape: WidgetStatePropertyAll<OutlinedBorder>(shape),
-    );
-  }
-
-  Color? _parseColor(String? value) {
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    var hex = value.replaceFirst('#', '');
-    if (hex.length == 6) {
-      hex = 'ff' + hex;
-    }
-    final int? intValue = int.tryParse(hex, radix: 16);
-    if (intValue == null) {
-      return null;
-    }
-    return Color(intValue);
   }
 
   @override
@@ -2919,13 +2907,14 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                       opacity: _isDropTargetActive ? 1 : 0,
                       duration: const Duration(milliseconds: 150),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
+                        padding: _spacingSymmetric(
+                          context,
                           horizontal: 12,
                           vertical: 8,
                         ),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: _radius(context, 16),
                             border: Border.all(
                               color: theme.colorScheme.primary,
                               width: 2,
@@ -2942,7 +2931,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                                   size: 36,
                                   color: theme.colorScheme.primary,
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(height: _spacingValue(context, 12)),
                                 Text(
                                   l10n.t('attachment_drop_prompt'),
                                   style: theme.textTheme.titleMedium?.copyWith(
@@ -2988,7 +2977,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
                 ? _StartScreen(options: controller.options.startScreen)
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(
+                    padding: _spacingSymmetric(context,
                         horizontal: 16, vertical: 12),
                     itemCount: _items.length,
                     itemBuilder: (context, index) {
@@ -3006,7 +2995,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
         ),
         if (controller.options.disclaimer != null)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: _spacingSymmetric(context, horizontal: 16, vertical: 4),
             child: Builder(
               builder: (context) {
                 final disclaimer = controller.options.disclaimer!;
@@ -3024,12 +3013,12 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
           ),
         if (_banners.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            padding: _spacingFromLTRB(context, 16, 4, 16, 8),
             child: Column(
               children: [
                 for (final banner in _banners)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: _spacingOnly(context, bottom: 8),
                     child: _NoticeBanner(
                       banner: banner,
                       localizations: l10n,
@@ -3164,7 +3153,7 @@ class _ChatHeader extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: _spacingSymmetric(context, horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border:
@@ -3302,9 +3291,9 @@ class _HistoryPanel extends StatelessWidget {
       return ListTile(
         dense: false,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: _radius(context, 12),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        contentPadding: _spacingSymmetric(context, horizontal: 12, vertical: 6),
         selected: selected,
         leading: Icon(
           pinned ? Icons.push_pin_outlined : Icons.chat_bubble_outline,
@@ -3351,7 +3340,7 @@ class _HistoryPanel extends StatelessWidget {
     if (error != null && (pinnedThreads.isNotEmpty || threads.isNotEmpty)) {
       listChildren.add(
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: _spacingSymmetric(context, horizontal: 12, vertical: 4),
           child: _HistoryErrorBanner(
             message: error!,
             localizations: localizations,
@@ -3370,13 +3359,13 @@ class _HistoryPanel extends StatelessWidget {
       for (final thread in pinnedThreads) {
         listChildren.add(
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: _spacingSymmetric(context, horizontal: 8, vertical: 4),
             child: buildThreadTile(thread, pinned: true),
           ),
         );
       }
       if (threads.isNotEmpty) {
-        listChildren.add(const SizedBox(height: 8));
+        listChildren.add(SizedBox(height: _spacingValue(context, 8)));
       }
     }
 
@@ -3389,7 +3378,7 @@ class _HistoryPanel extends StatelessWidget {
       for (final thread in threads) {
         listChildren.add(
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: _spacingSymmetric(context, horizontal: 8, vertical: 4),
             child: buildThreadTile(thread, pinned: false),
           ),
         );
@@ -3397,19 +3386,19 @@ class _HistoryPanel extends StatelessWidget {
     }
 
     if (loadingMore) {
-      listChildren.add(const SizedBox(height: 8));
+      listChildren.add(SizedBox(height: _spacingValue(context, 8)));
       for (var i = 0; i < 3; i++) {
         listChildren.add(
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: _HistorySkeletonTile(),
+          Padding(
+            padding: _spacingSymmetric(context, horizontal: 12, vertical: 6),
+            child: const _HistorySkeletonTile(),
           ),
         );
       }
     } else if (hasMore && onLoadMore != null) {
       listChildren.add(
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: _spacingSymmetric(context, horizontal: 16, vertical: 12),
           child: OutlinedButton.icon(
             onPressed: () => onLoadMore!(),
             icon: const Icon(Icons.history),
@@ -3427,7 +3416,7 @@ class _HistoryPanel extends StatelessWidget {
         if (error != null) {
           return Center(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: _spacingAll(context, 16),
               child: _HistoryErrorBanner(
                 message: error!,
                 localizations: localizations,
@@ -3447,7 +3436,7 @@ class _HistoryPanel extends StatelessWidget {
       }
       return ListView(
         controller: scrollController,
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: _spacingSymmetric(context, vertical: 8),
         children: listChildren,
       );
     }
@@ -3456,7 +3445,7 @@ class _HistoryPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+          padding: _spacingFromLTRB(context, 16, 16, 8, 8),
           child: Row(
             children: [
               Expanded(
@@ -3474,7 +3463,7 @@ class _HistoryPanel extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: _spacingSymmetric(context, horizontal: 16),
           child: TextField(
             controller: searchController,
             onChanged: onSearchChanged,
@@ -3494,7 +3483,7 @@ class _HistoryPanel extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: _spacingFromLTRB(context, 16, 12, 16, 8),
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -3515,7 +3504,7 @@ class _HistoryPanel extends StatelessWidget {
         Expanded(child: buildBody()),
         const Divider(height: 1),
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: _spacingAll(context, 16),
           child: FilledButton.icon(
             onPressed: () => onSelect(null),
             icon: const Icon(Icons.add),
@@ -3575,7 +3564,7 @@ class _HistorySectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: _spacingFromLTRB(context, 16, 12, 16, 4),
       child: Text(
         label,
         style: theme.textTheme.labelMedium?.copyWith(
@@ -3602,10 +3591,10 @@ class _HistoryStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: _spacingSymmetric(context, horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: _radius(context, 999),
       ),
       child: Text(
         label,
@@ -3630,10 +3619,10 @@ class _HistoryErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: _spacingSymmetric(context, horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: _radius(context, 12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3643,7 +3632,7 @@ class _HistoryErrorBanner extends StatelessWidget {
             size: 20,
             color: theme.colorScheme.onErrorContainer,
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: _spacingValue(context, 12)),
           Expanded(
             child: Text(
               message,
@@ -3679,7 +3668,7 @@ class _HistoryEmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: _spacingAll(context, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -3688,7 +3677,7 @@ class _HistoryEmptyState extends StatelessWidget {
               size: 48,
               color: theme.colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: _spacingValue(context, 16)),
             Text(
               message,
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -3711,11 +3700,11 @@ class _HistorySkeletonList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: _spacingSymmetric(context, horizontal: 16, vertical: 12),
       itemCount: _itemCount,
-      itemBuilder: (context, index) => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 6),
-        child: _HistorySkeletonTile(),
+      itemBuilder: (context, index) => Padding(
+        padding: _spacingSymmetric(context, vertical: 6),
+        child: const _HistorySkeletonTile(),
       ),
     );
   }
@@ -3734,10 +3723,10 @@ class _HistorySkeletonTile extends StatelessWidget {
           height: 40,
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: _radius(context, 12),
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: _spacingValue(context, 12)),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3746,16 +3735,16 @@ class _HistorySkeletonTile extends StatelessWidget {
                 height: 14,
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: _radius(context, 10),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: _spacingValue(context, 8)),
               Container(
                 height: 12,
                 width: 120,
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: _radius(context, 10),
                 ),
               ),
             ],
@@ -3839,11 +3828,11 @@ class _EntityBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      margin: const EdgeInsets.only(left: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: _spacingOnly(context, left: 4),
+      padding: _spacingSymmetric(context, horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: _radius(context, 999),
       ),
       child: Text(
         label,
@@ -3871,7 +3860,7 @@ class _AuthExpiredBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       color: theme.colorScheme.errorContainer,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: _spacingSymmetric(context, horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -4012,7 +4001,7 @@ class _StartScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: _spacingAll(context, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -4023,7 +4012,7 @@ class _StartScreen extends StatelessWidget {
             ),
             if (options?.prompts case final prompts?)
               Padding(
-                padding: const EdgeInsets.only(top: 16),
+                padding: _spacingOnly(context, top: 16),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -4122,7 +4111,7 @@ class _ChatItemView extends StatelessWidget {
         return _WorkflowView(item: item);
       default:
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: _spacingSymmetric(context, vertical: 8),
           child: Text('Unsupported item type ${item.type}'),
         );
     }
@@ -4152,7 +4141,7 @@ class _UserMessageBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
+        margin: _spacingSymmetric(context, vertical: 6),
         child: Material(
           elevation: elevation,
           color: background,
@@ -4164,7 +4153,7 @@ class _UserMessageBubble extends StatelessWidget {
                   borderColor == null ? null : Border.all(color: borderColor),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: _spacingAll(context, 12),
               child: Text(
                 text,
                 style: theme.textTheme.bodyMedium?.copyWith(color: textColor),
@@ -4212,7 +4201,7 @@ class _AssistantMessageBubble extends StatelessWidget {
     final bubble = Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
+        margin: _spacingSymmetric(context, vertical: 6),
         child: Material(
           elevation: elevation,
           color: background,
@@ -4224,7 +4213,7 @@ class _AssistantMessageBubble extends StatelessWidget {
                   borderColor == null ? null : Border.all(color: borderColor),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: _spacingAll(context, 12),
               child: text.isEmpty
                   ? const SizedBox.shrink()
                   : MarkdownBody(
@@ -4379,7 +4368,7 @@ class _AssistantActionsBarState extends State<_AssistantActionsBar> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 4),
+      padding: _spacingOnly(context, left: 4, bottom: 4),
       child: Row(children: buttons),
     );
   }
@@ -4397,10 +4386,10 @@ class _ClientToolCallView extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(12),
+        margin: _spacingSymmetric(context, vertical: 6),
+        padding: _spacingAll(context, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: _radius(context, 12),
           border:
               Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         ),
@@ -4434,7 +4423,7 @@ class _WidgetItemView extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: _spacingSymmetric(context, vertical: 6),
       child: ChatKitWidgetRenderer(
         widgetJson: widgetJson,
         controller: controller,
@@ -4460,10 +4449,10 @@ class _WorkflowView extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(12),
+        margin: _spacingSymmetric(context, vertical: 6),
+        padding: _spacingAll(context, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: _radius(context, 12),
           border:
               Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         ),
@@ -4475,7 +4464,7 @@ class _WorkflowView extends StatelessWidget {
                   'Workflow: ${(workflow['summary'] as Map)['title'] ?? 'Summary'}'),
             for (final task in tasks)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: _spacingOnly(context, top: 8),
                 child: Text('- ${task['title'] ?? task['type']}'),
               ),
           ],
@@ -4573,7 +4562,7 @@ class _Composer extends StatelessWidget {
       children: [
         if (pinnedTools.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: _spacingOnly(context, bottom: 8),
             child: Wrap(
               spacing: 8,
               children: [
@@ -4598,7 +4587,7 @@ class _Composer extends StatelessWidget {
           ),
         if (tags.isNotEmpty || onAddTag != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: _spacingOnly(context, bottom: 8),
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -4646,7 +4635,7 @@ class _Composer extends StatelessWidget {
         if ((models != null && models!.isNotEmpty) ||
             (tools != null && tools!.isNotEmpty))
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: _spacingOnly(context, bottom: 8),
             child: Wrap(
               spacing: 12,
               runSpacing: 8,
@@ -4707,9 +4696,10 @@ class _Composer extends StatelessWidget {
             height: 96,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
+              padding: _spacingSymmetric(context, horizontal: 4),
               itemCount: pendingUploads.length + attachments.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, __) =>
+                  SizedBox(width: _spacingValue(context, 8)),
               itemBuilder: (context, index) {
                 if (index < pendingUploads.length) {
                   final upload = pendingUploads[index];
@@ -4737,7 +4727,7 @@ class _Composer extends StatelessWidget {
           ),
         if (isComposerLocked && lockMessage != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: _spacingOnly(context, bottom: 8),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -4752,7 +4742,9 @@ class _Composer extends StatelessWidget {
           children: [
             if (onAttachment != null)
               IconButton(
-                icon: const Icon(Icons.attach_file),
+                icon: Icon(
+                  ChatKitIcons.forWidget('plus') ?? Icons.add,
+                ),
                 onPressed: disabled ? null : onAttachment,
               ),
             if (onAddTag != null)
@@ -4773,16 +4765,21 @@ class _Composer extends StatelessWidget {
                   decoration: InputDecoration(
                     hintText: placeholder,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: _radius(context, 12),
                     ),
                   ),
                   onChanged: onTextChanged,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: _spacingValue(context, 8)),
             FilledButton(
               onPressed: disabled ? null : onSend,
+              style: FilledButton.styleFrom(
+                shape: const CircleBorder(),
+                padding: EdgeInsets.all(_spacingValue(context, 8)),
+                minimumSize: Size.square(_spacingValue(context, 40)),
+              ),
               child: isStreaming
                   ? SizedBox(
                       width: 16,
@@ -4825,7 +4822,7 @@ class _Composer extends StatelessWidget {
               : BorderSide(color: composerBorderColor),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: _spacingSymmetric(context, horizontal: 12, vertical: 8),
           child: content,
         ),
       ),
@@ -4958,14 +4955,14 @@ class _NoticeBanner extends StatelessWidget {
     final palette = _paletteForLevel(theme, banner.level);
     return Material(
       color: palette.background,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: _radius(context, 12),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: _spacingAll(context, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(palette.icon, color: palette.iconColor),
-            const SizedBox(width: 12),
+            SizedBox(width: _spacingValue(context, 12)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -5054,6 +5051,7 @@ class _AttachmentChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = ChatKitTheme.of(context).palette;
     final isImage = attachment is ImageAttachment;
     final typeLabel =
         _attachmentTypeLabel(attachment.name, attachment.mimeType);
@@ -5078,7 +5076,7 @@ class _AttachmentChip extends StatelessWidget {
     return Container(
       width: 140,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: _radius(context, 12),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
@@ -5090,18 +5088,18 @@ class _AttachmentChip extends StatelessWidget {
               top: 8,
               left: 8,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: _spacingSymmetric(context, horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: isImage
-                      ? Colors.black54
+                      ? palette.overlayStrong.withValues(alpha: 0.55)
                       : theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: _radius(context, 8),
                 ),
                 child: Text(
                   typeLabel,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: isImage
-                        ? Colors.white
+                        ? theme.colorScheme.onInverseSurface
                         : theme.colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w600,
                   ),
@@ -5116,15 +5114,18 @@ class _AttachmentChip extends StatelessWidget {
                 message: removeTooltip,
                 child: InkWell(
                   onTap: () => onRemove!(attachment),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: _radius(context, 12),
                   child: Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                    decoration: BoxDecoration(
+                      color: palette.overlayStrong.withValues(alpha: 0.55),
+                      borderRadius: _radius(context, 12),
                     ),
-                    padding: const EdgeInsets.all(4),
-                    child:
-                        const Icon(Icons.close, size: 16, color: Colors.white),
+                    padding: _spacingAll(context, 4),
+                    child: Icon(
+                      ChatKitIcons.forHeader('close') ?? Icons.close,
+                      size: 16,
+                      color: theme.colorScheme.onInverseSurface,
+                    ),
                   ),
                 ),
               ),
@@ -5134,10 +5135,10 @@ class _AttachmentChip extends StatelessWidget {
             right: 0,
             bottom: 0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: _spacingSymmetric(context, horizontal: 8, vertical: 8),
               decoration: BoxDecoration(
                 color: isImage
-                    ? Colors.black.withValues(alpha: 0.55)
+                    ? palette.overlayStrong.withValues(alpha: 0.55)
                     : theme.colorScheme.surface,
               ),
               child: Column(
@@ -5149,8 +5150,9 @@ class _AttachmentChip extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color:
-                          isImage ? Colors.white : theme.colorScheme.onSurface,
+                      color: isImage
+                          ? theme.colorScheme.onInverseSurface
+                          : theme.colorScheme.onSurface,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -5161,7 +5163,8 @@ class _AttachmentChip extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: isImage
-                            ? Colors.white70
+                            ? theme.colorScheme.onInverseSurface
+                                .withValues(alpha: 0.7)
                             : theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -5203,9 +5206,9 @@ class _AttachmentUploadChip extends StatelessWidget {
         child: Material(
           elevation: 1,
           color: theme.colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: _radius(context, 12),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: _spacingAll(context, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -5213,7 +5216,7 @@ class _AttachmentUploadChip extends StatelessWidget {
                 Row(
                   children: [
                     Icon(Icons.error_outline, color: theme.colorScheme.error),
-                    const SizedBox(width: 8),
+                    SizedBox(width: _spacingValue(context, 8)),
                     Expanded(
                       child: Text(
                         upload.name,
@@ -5229,7 +5232,7 @@ class _AttachmentUploadChip extends StatelessWidget {
                 ),
                 if (typeLabel != null || sizeLabel != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: _spacingOnly(context, top: 4),
                     child: Text(
                       [
                         if (typeLabel != null) typeLabel,
@@ -5242,7 +5245,7 @@ class _AttachmentUploadChip extends StatelessWidget {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: _spacingOnly(context, top: 8),
                   child: Text(
                     localizations.t('attachment_upload_failed'),
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -5252,7 +5255,7 @@ class _AttachmentUploadChip extends StatelessWidget {
                 ),
                 if (onRetry != null || onRemove != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                    padding: _spacingOnly(context, top: 8),
                     child: Wrap(
                       spacing: 8,
                       children: [
@@ -5311,9 +5314,9 @@ class _AttachmentUploadChip extends StatelessWidget {
       child: Material(
         elevation: 1,
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: _radius(context, 12),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: _spacingAll(context, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -5332,7 +5335,7 @@ class _AttachmentUploadChip extends StatelessWidget {
                   ),
                   if (details.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(left: 8),
+                      padding: _spacingOnly(context, left: 8),
                       child: Text(
                         details,
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -5355,9 +5358,9 @@ class _AttachmentUploadChip extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: _spacingValue(context, 8)),
               LinearProgressIndicator(value: progress),
-              const SizedBox(height: 8),
+              SizedBox(height: _spacingValue(context, 8)),
               Text(
                 statusText,
                 style: theme.textTheme.bodySmall,

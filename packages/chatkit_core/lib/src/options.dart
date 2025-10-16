@@ -234,6 +234,8 @@ class ThemeOption {
     this.color,
     this.typography,
     this.shapes,
+    this.radius,
+    this.density,
     this.breakpoints,
     this.backgroundGradient,
     this.elevations,
@@ -244,6 +246,8 @@ class ThemeOption {
   final ThemeColorOptions? color;
   final ThemeTypographyOptions? typography;
   final ThemeShapeOptions? shapes;
+  final ThemeRadiusOption? radius;
+  final ThemeDensityOption? density;
   final ThemeBreakpointOptions? breakpoints;
   final ThemeGradientOptions? backgroundGradient;
   final ThemeElevationOptions? elevations;
@@ -254,6 +258,19 @@ enum ColorSchemeOption {
   light,
   dark,
   system,
+}
+
+enum ThemeRadiusOption {
+  pill,
+  round,
+  soft,
+  sharp,
+}
+
+enum ThemeDensityOption {
+  compact,
+  normal,
+  spacious,
 }
 
 @immutable
@@ -281,7 +298,11 @@ class GrayscaleOptions {
     this.border,
     this.background,
     this.tint,
+    this.tintColor,
     this.shadow,
+    this.hue,
+    this.tintStep,
+    this.shade,
   });
 
   final String? label0;
@@ -291,7 +312,11 @@ class GrayscaleOptions {
   final String? border;
   final String? background;
   final String? tint;
+  final String? tintColor;
   final String? shadow;
+  final double? hue;
+  final int? tintStep;
+  final int? shade;
 }
 
 @immutable
@@ -301,12 +326,14 @@ class AccentColorOptions {
     this.onPrimary,
     this.secondary,
     this.onSecondary,
+    this.level,
   });
 
   final String? primary;
   final String? onPrimary;
   final String? secondary;
   final String? onSecondary;
+  final int? level;
 }
 
 @immutable
@@ -316,12 +343,16 @@ class SurfaceColorOptions {
     this.secondary,
     this.tertiary,
     this.quaternary,
+    this.background,
+    this.foreground,
   });
 
   final String? primary;
   final String? secondary;
   final String? tertiary;
   final String? quaternary;
+  final String? background;
+  final String? foreground;
 }
 
 @immutable
@@ -392,10 +423,35 @@ class ThemeTypographyOptions {
   const ThemeTypographyOptions({
     this.fontFamily,
     this.monospaceFontFamily,
+    this.fontFamilyMono,
+    this.baseSize,
+    this.fontSources,
   });
 
   final String? fontFamily;
   final String? monospaceFontFamily;
+  final String? fontFamilyMono;
+  final double? baseSize;
+  final List<ThemeFontSource>? fontSources;
+}
+
+@immutable
+class ThemeFontSource {
+  const ThemeFontSource({
+    required this.family,
+    required this.src,
+    this.weight,
+    this.style,
+    this.display,
+    this.unicodeRange,
+  });
+
+  final String family;
+  final String src;
+  final String? weight;
+  final String? style;
+  final String? display;
+  final String? unicodeRange;
 }
 
 @immutable
@@ -677,7 +733,7 @@ class ToolOption {
     this.icon,
     this.pinned = false,
   })  : assert(id != null || name != null, 'ToolOption.id is required'),
-        id = (id ?? name)!;
+        id = id ?? (name as String);
 
   final String id;
   final String label;

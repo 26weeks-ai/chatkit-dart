@@ -216,7 +216,69 @@ class _CoachDemoScreenState extends State<CoachDemoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('ChatKit Coach Demo'),
+        actions: [
+          IconButton(
+            tooltip: 'Component gallery',
+            icon: const Icon(Icons.dashboard_customize_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const _GalleryScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: ChatKitView(controller: _controller),
+    );
+  }
+}
+
+class _GalleryScreen extends StatefulWidget {
+  const _GalleryScreen();
+
+  @override
+  State<_GalleryScreen> createState() => _GalleryScreenState();
+}
+
+class _GalleryScreenState extends State<_GalleryScreen> {
+  Brightness _brightness = Brightness.light;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Component Gallery'),
+        actions: [
+          IconButton(
+            tooltip: _brightness == Brightness.dark
+                ? 'View light theme'
+                : 'View dark theme',
+            icon: Icon(
+              _brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            onPressed: () {
+              setState(() {
+                _brightness = _brightness == Brightness.dark
+                    ? Brightness.light
+                    : Brightness.dark;
+              });
+            },
+          ),
+        ],
+      ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: ChatKitGallery(
+          key: ValueKey(_brightness),
+          brightness: _brightness,
+        ),
+      ),
     );
   }
 }

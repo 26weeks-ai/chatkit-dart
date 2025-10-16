@@ -23,9 +23,10 @@ class ChatKitApiClient {
         _httpClient = httpClient ?? http.Client(),
         _sseClient =
             sseClient ?? SseClient(httpClient: httpClient ?? http.Client()),
-        _currentClientSecret = apiConfig is HostedApiConfig
-            ? (apiConfig as HostedApiConfig).clientToken
-            : null;
+        _currentClientSecret = switch (apiConfig) {
+          HostedApiConfig(:final clientToken) => clientToken,
+          _ => null,
+        };
 
   final ChatKitApiConfig _apiConfig;
   final http.Client _httpClient;
@@ -240,10 +241,10 @@ class ChatKitApiClient {
   }
 
   Future<void> _ensureHostedCredentials({bool forceRefresh = false}) async {
-    if (_apiConfig is! HostedApiConfig) {
+    final config = _hostedConfig;
+    if (config == null) {
       return;
     }
-    final config = _apiConfig as HostedApiConfig;
 
     if (!forceRefresh &&
         _currentClientSecret != null &&
@@ -289,10 +290,10 @@ class ChatKitApiClient {
   }
 
   Future<bool> _tryRefreshHostedSecret() async {
-    if (_apiConfig is! HostedApiConfig) {
+    final config = _hostedConfig;
+    if (config == null) {
       return false;
     }
-    final config = _apiConfig as HostedApiConfig;
     if (config.getClientSecret == null) {
       return false;
     }
@@ -304,10 +305,10 @@ class ChatKitApiClient {
     if (statusCode != 401) {
       return false;
     }
-    if (_apiConfig is! HostedApiConfig) {
+    final config = _hostedConfig;
+    if (config == null) {
       return false;
     }
-    final config = _apiConfig as HostedApiConfig;
     return config.getClientSecret != null;
   }
 
@@ -319,5 +320,10 @@ class ChatKitApiClient {
       }
     }
     return _httpClient.send(request);
+  }
+
+  HostedApiConfig? get _hostedConfig {
+    final config = _apiConfig;
+    return config is HostedApiConfig ? config : null;
   }
 }

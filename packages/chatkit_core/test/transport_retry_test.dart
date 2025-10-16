@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:chatkit_core/chatkit_core.dart';
 import 'package:chatkit_core/src/api/api_client.dart';
-import 'package:chatkit_core/src/models/request.dart';
 import 'package:test/test.dart';
 
 class _RetryingApiClient extends ChatKitApiClient {
@@ -85,9 +84,9 @@ void main() {
       () async {
     final client = _RetryingApiClient();
     final controller = ChatKitController(
-      ChatKitOptions(
-        api: const CustomApiConfig(url: 'https://example.com'),
-        transport: const TransportOption(
+      const ChatKitOptions(
+        api: CustomApiConfig(url: 'https://example.com'),
+        transport: TransportOption(
           initialBackoff: Duration(milliseconds: 20),
           maxBackoff: Duration(milliseconds: 40),
         ),

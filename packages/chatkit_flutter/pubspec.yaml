@@ -31,6 +31,7 @@ dependencies:
   smooth_page_indicator: ^1.1.0
   signature: ^5.4.1
   share_plus: ^7.2.1
+  phosphor_flutter: ^2.0.1
 
 dev_dependencies:
   flutter_test:

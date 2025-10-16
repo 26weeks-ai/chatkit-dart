@@ -1,9 +1,7 @@
 import 'dart:async';
 
 import 'package:chatkit_core/chatkit_core.dart';
-import 'package:chatkit_core/src/actions/client_tools.dart';
 import 'package:chatkit_core/src/api/api_client.dart';
-import 'package:chatkit_core/src/models/request.dart';
 import 'package:test/test.dart';
 
 import 'fixtures/streaming_fixture.dart';

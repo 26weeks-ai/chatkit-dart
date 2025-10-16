@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
 
+import '../theme/chatkit_theme.dart';
+
 class ChatKitVideoPlayer extends StatefulWidget {
   const ChatKitVideoPlayer({
     super.key,
@@ -104,15 +106,17 @@ class _VideoControlsOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ChatKitTheme.of(context).palette;
+    final theme = Theme.of(context);
     return Positioned.fill(
       child: Material(
-        color: Colors.black38,
+        color: palette.overlayStrong.withValues(alpha: 0.4),
         child: InkWell(
           onTap: onToggle,
           child: Center(
             child: Icon(
               isPlaying ? Icons.pause_circle : Icons.play_circle,
-              color: Colors.white,
+              color: theme.colorScheme.onInverseSurface,
               size: 48,
             ),
           ),
