@@ -536,6 +536,19 @@ class ChatKitController {
     final resolvedSize = size ?? bytes.length;
     onProgress?.call(0, resolvedSize);
 
+    // Enforce client-side limits to align with backend policy (image files <= 10MB).
+    if (!mimeType.toLowerCase().startsWith('image/')) {
+      throw ChatKitException(
+        'Only image attachments are supported at this time.',
+      );
+    }
+    const maxBytes = 10 * 1024 * 1024; // 10MB
+    if (resolvedSize > maxBytes) {
+      throw ChatKitException(
+        'Images larger than 10MB cannot be uploaded. Please choose a smaller file.',
+      );
+    }
+
     _emitLog(
       'attachments.upload.start',
       {
