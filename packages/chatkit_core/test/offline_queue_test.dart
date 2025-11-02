@@ -146,12 +146,12 @@ void main() {
       );
 
       expect(
-        controller.threadItems.where((item) => item.metadata['pending'] == true),
+        controller.threadItems
+            .where((item) => item.metadata['pending'] == true),
         isEmpty,
       );
       expect(
-        controller.threadItems
-            .where((item) => item.id == 'server-confirmed'),
+        controller.threadItems.where((item) => item.id == 'server-confirmed'),
         hasLength(1),
       );
     });
@@ -211,7 +211,8 @@ void main() {
       await controller.setThreadId('thread_ack_input');
       await controller.sendUserMessage(text: 'hello');
       expect(
-        controller.threadItems.where((item) => item.metadata['pending'] == true),
+        controller.threadItems
+            .where((item) => item.metadata['pending'] == true),
         isNotEmpty,
       );
 
@@ -234,7 +235,8 @@ void main() {
       );
 
       expect(
-        controller.threadItems.where((item) => item.metadata['pending'] == true),
+        controller.threadItems
+            .where((item) => item.metadata['pending'] == true),
         isEmpty,
       );
       expect(

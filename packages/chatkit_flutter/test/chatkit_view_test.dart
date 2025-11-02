@@ -443,6 +443,73 @@ void main() {
     expect(find.text('Message copied to clipboard.'), findsOneWidget);
   });
 
+  testWidgets('ChatKitView hides hidden context items when configured',
+      (tester) async {
+    final controller = ChatKitController(
+      const ChatKitOptions(
+        api: CustomApiConfig(url: 'https://example.com'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildRendererHarness(
+        controller: controller,
+        body: ChatKitView(
+          controller: controller,
+          hideHiddenItems: true,
+        ),
+      ),
+    );
+
+    controller.debugHandleStreamEvent(
+      ThreadCreatedEvent(
+        thread: Thread(
+          metadata: ThreadMetadata(
+            id: 'thread_test',
+            title: 'Test thread',
+            createdAt: DateTime(2024),
+            status: ThreadStatus.fromJson({'type': 'active'}),
+            metadata: const {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final visible = ThreadItem(
+      id: 'item_visible',
+      threadId: 'thread_test',
+      createdAt: DateTime(2024),
+      type: 'assistant_message',
+      role: 'assistant',
+      content: const [
+        {'type': 'text', 'text': 'Visible assistant message'},
+      ],
+    );
+    final hidden = ThreadItem(
+      id: 'item_hidden',
+      threadId: 'thread_test',
+      createdAt: DateTime(2024),
+      type: 'hidden_context',
+      role: 'assistant',
+      content: const [
+        {'type': 'text', 'text': 'Hidden payload'},
+      ],
+    );
+
+    controller.debugHandleStreamEvent(ThreadItemAddedEvent(item: hidden));
+    controller.debugHandleStreamEvent(ThreadItemAddedEvent(item: visible));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final state = tester.state(find.byType(ChatKitView)) as dynamic;
+    final items = state.debugVisibleItems() as List<ThreadItem>;
+
+    expect(items.any((item) => item.id == hidden.id), isFalse);
+    expect(items.any((item) => item.id == visible.id), isTrue);
+    await controller.dispose();
+  });
+
   testWidgets('Form submission nests payload keys', (tester) async {
     final controller = _CapturingController();
     final widgetJson = {

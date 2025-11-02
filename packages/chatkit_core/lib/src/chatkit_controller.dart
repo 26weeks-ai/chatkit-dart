@@ -28,13 +28,16 @@ class ChatKitController {
   ChatKitController(
     ChatKitOptions options, {
     ChatKitApiClient? apiClient,
+    http.Client? uploadClient,
   })  : _options = options,
-        _apiClient = apiClient ?? ChatKitApiClient(apiConfig: options.api) {
+        _apiClient = apiClient ?? ChatKitApiClient(apiConfig: options.api),
+        _uploadClient = uploadClient ?? http.Client() {
     _apiClient.acceptLanguage = options.locale;
   }
 
   final ChatKitApiClient _apiClient;
   ChatKitOptions _options;
+  final http.Client _uploadClient;
   final StreamController<ChatKitEvent> _eventController =
       StreamController<ChatKitEvent>.broadcast();
 
@@ -86,6 +89,24 @@ class ChatKitController {
       ChatKitLogEvent(name: name, data: payload),
     );
     _options.onLog?.call(name, payload);
+  }
+
+  Future<Map<String, Object?>> _sendRequest(
+    ChatKitRequest request, {
+    Map<String, Object?> bodyOverrides = const {},
+  }) async {
+    final response = await _apiClient.send(
+      request,
+      bodyOverrides: bodyOverrides,
+    );
+    _restoreComposerIfNeeded();
+    return response;
+  }
+
+  void _restoreComposerIfNeeded() {
+    if (!_composerAvailable && _composerUnavailableReason == 'auth') {
+      _setComposerAvailability(available: true);
+    }
   }
 
   void _ensureIdle({bool allowThreadLoad = false}) {
@@ -360,7 +381,7 @@ class ChatKitController {
     );
 
     try {
-      final response = await _apiClient.send(
+      final response = await _sendRequest(
         threadsGetById(threadId: threadId),
       );
       final thread = Thread.fromJson(response);
@@ -402,7 +423,7 @@ class ChatKitController {
         if (pinnedOnly != null) 'pinned_only': pinnedOnly,
         ...metadata,
       };
-      final response = await _apiClient.send(
+      final response = await _sendRequest(
         threadsList(
           limit: limit,
           after: after,
@@ -422,7 +443,7 @@ class ChatKitController {
 
   Future<void> deleteThread(String threadId) async {
     try {
-      await _apiClient.send(threadsDelete(threadId: threadId));
+      await _sendRequest(threadsDelete(threadId: threadId));
     } on ChatKitServerException catch (error) {
       _handleCommonServerError(error);
       rethrow;
@@ -439,7 +460,7 @@ class ChatKitController {
 
   Future<void> renameThread(String threadId, String title) async {
     try {
-      final response = await _apiClient.send(
+      final response = await _sendRequest(
         threadsUpdate(threadId: threadId, updates: {'title': title}),
       );
       if (_currentThreadId == threadId) {
@@ -461,7 +482,7 @@ class ChatKitController {
     required String kind,
   }) async {
     try {
-      await _apiClient.send(
+      await _sendRequest(
         itemsFeedback(threadId: threadId, itemIds: itemIds, kind: kind),
       );
     } on ChatKitServerException catch (error) {
@@ -579,7 +600,7 @@ class ChatKitController {
       if (attachment == null) {
         Map<String, Object?> response;
         try {
-          response = await _apiClient.send(
+          response = await _sendRequest(
             attachmentsCreate(
               name: name,
               size: resolvedSize,
@@ -593,13 +614,20 @@ class ChatKitController {
 
         attachment = ChatKitAttachment.fromJson(response);
         if (attachment.uploadUrl != null) {
-          await _uploadToUrl(
-            attachment.uploadUrl!,
-            bytes,
-            mimeType,
+          final updated = await _performTwoPhaseUpload(
+            attachment: attachment,
+            name: name,
+            mimeType: mimeType,
+            bytes: bytes,
+            resolvedSize: resolvedSize,
             onProgress: onProgress,
             isCancelled: isCancelled,
           );
+          if (updated != null &&
+              updated.isNotEmpty &&
+              updated.containsKey('id')) {
+            attachment = ChatKitAttachment.fromJson(updated);
+          }
         }
       }
 
@@ -670,7 +698,7 @@ class ChatKitController {
     request.fields['mime_type'] = mimeType;
     request.fields['size'] = resolvedSize.toString();
 
-    final response = await request.send();
+    final response = await _uploadClient.send(request);
     final body = await response.stream.bytesToString();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ChatKitServerException(
@@ -690,6 +718,73 @@ class ChatKitController {
     return ChatKitAttachment.fromJson(payload);
   }
 
+  Future<Map<String, Object?>?> _performTwoPhaseUpload({
+    required ChatKitAttachment attachment,
+    required String name,
+    required String mimeType,
+    required List<int> bytes,
+    required int resolvedSize,
+    void Function(int sentBytes, int totalBytes)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final uploadUrl = attachment.uploadUrl;
+    if (uploadUrl == null || uploadUrl.isEmpty) {
+      return null;
+    }
+    final method = (attachment.uploadMethod ?? 'PUT').toUpperCase();
+    final headers = attachment.uploadHeaders;
+    final fields = attachment.uploadFields;
+
+    if (method == 'POST') {
+      final request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
+      if (headers != null && headers.isNotEmpty) {
+        request.headers.addAll(headers);
+      }
+      final mutableFields = fields != null
+          ? Map<String, String>.from(fields)
+          : <String, String>{};
+      final fileField = mutableFields.remove('file_field') ?? 'file';
+      request.fields.addAll(mutableFields);
+      final progressStream = _trackedByteStream(
+        bytes,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+      );
+      request.files.add(
+        http.MultipartFile(
+          fileField,
+          progressStream,
+          resolvedSize,
+          filename: name,
+          contentType: MediaType.parse(mimeType),
+        ),
+      );
+      final response = await _uploadClient.send(request);
+      final body = await response.stream.bytesToString();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ChatKitServerException(
+          'Failed to upload attachment to storage',
+          statusCode: response.statusCode,
+          error: body.isEmpty ? null : {'body': body},
+        );
+      }
+      if (body.isEmpty) {
+        return null;
+      }
+      return castMap(jsonDecode(body));
+    }
+
+    return await _uploadToUrl(
+      uploadUrl,
+      bytes,
+      mimeType,
+      method: method,
+      headers: headers,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    );
+  }
+
   Future<void> dispose() async {
     _offlineRetryTimer?.cancel();
     _composerAvailabilityTimer?.cancel();
@@ -697,6 +792,7 @@ class ChatKitController {
     _streamingDeltaTimer?.cancel();
     await _apiClient.close();
     await _eventController.close();
+    _uploadClient.close();
   }
 
   Future<_StreamingOutcome> _runStreamingRequest(
@@ -741,125 +837,179 @@ class ChatKitController {
 
     Object? capturedError;
     StackTrace? capturedStack;
+    Object? finalError;
+    final stopwatch = Stopwatch()..start();
+    Duration? firstEventLatency;
+    var streamedEventCount = 0;
+    var completionStatus = 'unknown';
+    final baseLog = <String, Object?>{
+      'request_type': request.type,
+      if (_currentThreadId != null) 'thread_id': _currentThreadId,
+      if (pendingRequestId != null) 'pending_item_id': pendingRequestId,
+      if (isFollowUp) 'follow_up': true,
+    };
+    _emitLog('transport.streaming.start', {
+      ...baseLog,
+      'allow_queue': allowQueue,
+    });
 
-    while (true) {
-      final completer = Completer<void>();
-      capturedError = null;
-      capturedStack = null;
+    try {
+      while (true) {
+        final completer = Completer<void>();
+        capturedError = null;
+        capturedStack = null;
+        final currentAttempt = retryCount + 1;
 
-      try {
-        await _apiClient.sendStreaming(
-          request,
-          onEvent: (event) async {
-            await _handleStreamEvent(event);
-          },
-          onError: (error, stackTrace) {
-            if (error is ChatKitServerException) {
-              _handleCommonServerError(error);
+        try {
+          await _apiClient.sendStreaming(
+            request,
+            onEvent: (event) async {
+              if (firstEventLatency == null) {
+                firstEventLatency = stopwatch.elapsed;
+                _emitLog(
+                  'transport.streaming.first_event',
+                  {
+                    ...baseLog,
+                    'attempt': currentAttempt,
+                    'latency_ms': firstEventLatency!.inMilliseconds,
+                  },
+                );
+              }
+              streamedEventCount += 1;
+              await _handleStreamEvent(event);
+            },
+            onError: (error, stackTrace) {
+              if (error is ChatKitServerException) {
+                _handleCommonServerError(error);
+              }
+              final message = error.toString();
+              _eventController.add(
+                ChatKitErrorEvent(
+                  error: message,
+                  allowRetry: true,
+                ),
+              );
+              capturedError = error;
+              capturedStack = stackTrace;
+              if (!completer.isCompleted) {
+                completer.completeError(error, stackTrace);
+              }
+            },
+            onDone: () {
+              if (!completer.isCompleted) {
+                completer.complete();
+              }
+            },
+            keepAliveTimeout: keepAliveTimeout,
+            onKeepAliveTimeout: () {
+              _emitLog(
+                'transport.keepalive.timeout',
+                {
+                  ...baseLog,
+                },
+              );
+            },
+            onRetrySuggested: (duration) {
+              if (duration.inMilliseconds > 0) {
+                serverRetryHint = duration;
+              }
+            },
+          );
+        } on Object catch (error, stackTrace) {
+          capturedError = error;
+          capturedStack = stackTrace;
+          if (error is ChatKitServerException) {
+            _handleCommonServerError(error);
+          }
+          if (!completer.isCompleted) {
+            completer.completeError(error, stackTrace);
+          }
+        }
+
+        try {
+          await completer.future;
+          capturedError = null;
+          completionStatus = 'success';
+          break;
+        } catch (error, stackTrace) {
+          capturedError = error;
+          capturedStack = stackTrace;
+        }
+
+        if (!_shouldRetryStreamingError(capturedError) ||
+            retryCount >= maxAttempts) {
+          if (!isFollowUp) {
+            _isStreaming = false;
+          }
+          if (capturedError != null) {
+            if (allowQueue && _shouldRetryStreamingError(capturedError)) {
+              completionStatus = 'queued';
+              _enqueueOfflineRequest(
+                request,
+                pendingRequestId: pendingRequestId,
+                isFollowUp: isFollowUp,
+              );
+              return _StreamingOutcome.queued;
             }
-            final message = error.toString();
-            _eventController.add(
-              ChatKitErrorEvent(
-                error: message,
-                allowRetry: true,
-              ),
+            finalError = capturedError;
+            Error.throwWithStackTrace(
+              capturedError as Object,
+              capturedStack ?? StackTrace.current,
             );
-            capturedError = error;
-            capturedStack = stackTrace;
-            if (!completer.isCompleted) {
-              completer.completeError(error, stackTrace);
-            }
-          },
-          onDone: () {
-            if (!completer.isCompleted) {
-              completer.complete();
-            }
-          },
-          keepAliveTimeout: keepAliveTimeout,
-          onKeepAliveTimeout: () {
-            _emitLog(
-              'transport.keepalive.timeout',
-              {
-                if (_currentThreadId != null) 'threadId': _currentThreadId,
-              },
-            );
-          },
-          onRetrySuggested: (duration) {
-            if (duration.inMilliseconds > 0) {
-              serverRetryHint = duration;
-            }
+          }
+          completionStatus = 'success';
+          break;
+        }
+
+        retryCount += 1;
+        final hint = serverRetryHint;
+        final delay = _computeBackoffDelay(
+          retryCount: retryCount,
+          initialBackoff: initialBackoff,
+          maxBackoff: maxBackoff,
+          serverHint: hint,
+        );
+        serverRetryHint = null;
+        _emitLog(
+          'transport.retry',
+          {
+            ...baseLog,
+            'attempt': retryCount,
+            'delay_ms': delay.inMilliseconds,
+            if (hint != null) 'server_hint_ms': hint.inMilliseconds,
           },
         );
-      } on Object catch (error, stackTrace) {
-        capturedError = error;
-        capturedStack = stackTrace;
-        if (error is ChatKitServerException) {
-          _handleCommonServerError(error);
-        }
-        if (!completer.isCompleted) {
-          completer.completeError(error, stackTrace);
-        }
+        await Future.delayed(delay);
       }
 
-      try {
-        await completer.future;
-        capturedError = null;
-        break;
-      } catch (error, stackTrace) {
-        capturedError = error;
-        capturedStack = stackTrace;
+      if (!isFollowUp) {
+        _isStreaming = false;
       }
 
-      if (!_shouldRetryStreamingError(capturedError) ||
-          retryCount >= maxAttempts) {
-        if (!isFollowUp) {
-          _isStreaming = false;
-        }
-        if (capturedError != null) {
-          if (allowQueue && _shouldRetryStreamingError(capturedError)) {
-            _enqueueOfflineRequest(
-              request,
-              pendingRequestId: pendingRequestId,
-              isFollowUp: isFollowUp,
-            );
-            return _StreamingOutcome.queued;
-          }
-          Error.throwWithStackTrace(
-            capturedError as Object,
-            capturedStack ?? StackTrace.current,
-          );
-        }
-        break;
+      _restoreComposerIfNeeded();
+      completionStatus = completionStatus == 'unknown' ? 'success' : completionStatus;
+      return _StreamingOutcome.completed;
+    } catch (error) {
+      finalError = error;
+      completionStatus = completionStatus == 'queued' ? completionStatus : 'error';
+      rethrow;
+    } finally {
+      stopwatch.stop();
+      final logData = <String, Object?>{
+        ...baseLog,
+        'status': completionStatus,
+        'duration_ms': stopwatch.elapsedMilliseconds,
+        'event_count': streamedEventCount,
+        'retries': retryCount,
+      };
+      if (firstEventLatency != null) {
+        logData['first_event_ms'] = firstEventLatency!.inMilliseconds;
       }
-
-      retryCount += 1;
-      final hint = serverRetryHint;
-      final delay = _computeBackoffDelay(
-        retryCount: retryCount,
-        initialBackoff: initialBackoff,
-        maxBackoff: maxBackoff,
-        serverHint: hint,
-      );
-      serverRetryHint = null;
-      _emitLog(
-        'transport.retry',
-        {
-          'attempt': retryCount,
-          'delay_ms': delay.inMilliseconds,
-          if (hint != null) 'server_hint_ms': hint.inMilliseconds,
-        },
-      );
-      await Future.delayed(delay);
+      if (finalError != null && completionStatus == 'error') {
+        logData['error_type'] = finalError.runtimeType.toString();
+      }
+      _emitLog('transport.streaming.complete', logData);
     }
-
-    if (!isFollowUp) {
-      _isStreaming = false;
-    }
-
-    if (_composerUnavailableReason == null) {
-      _setComposerAvailability(available: true);
-    }
-    return _StreamingOutcome.completed;
   }
 
   bool _shouldRetryStreamingError(Object? error) {
@@ -1661,40 +1811,48 @@ class ChatKitController {
     );
   }
 
-  Future<void> _uploadToUrl(
+  Future<Map<String, Object?>?> _uploadToUrl(
     String url,
     List<int> bytes,
     String mimeType, {
+    String method = 'PUT',
+    Map<String, String>? headers,
     void Function(int sentBytes, int totalBytes)? onProgress,
     bool Function()? isCancelled,
   }) async {
-    final client = http.Client();
+    final request = http.StreamedRequest(method.toUpperCase(), Uri.parse(url))
+      ..headers['content-type'] = mimeType;
+    if (headers != null && headers.isNotEmpty) {
+      request.headers.addAll(headers);
+    }
+    final total = bytes.length;
+    var sent = 0;
+    for (final chunk in _byteChunks(bytes)) {
+      if (isCancelled?.call() == true) {
+        await request.sink.close();
+        throw ChatKitException('Upload cancelled');
+      }
+      request.sink.add(chunk);
+      sent += chunk.length;
+      onProgress?.call(sent, total);
+    }
+    await request.sink.close();
+    final response = await _uploadClient.send(request);
+    final body = await response.stream.bytesToString();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ChatKitServerException(
+        'Failed to upload attachment to storage',
+        statusCode: response.statusCode,
+        error: body.isEmpty ? null : {'body': body},
+      );
+    }
+    if (body.isEmpty) {
+      return null;
+    }
     try {
-      final request = http.StreamedRequest('PUT', Uri.parse(url))
-        ..headers['content-type'] = mimeType;
-      final total = bytes.length;
-      var sent = 0;
-      for (final chunk in _byteChunks(bytes)) {
-        if (isCancelled?.call() == true) {
-          await request.sink.close();
-          throw ChatKitException('Upload cancelled');
-        }
-        request.sink.add(chunk);
-        sent += chunk.length;
-        onProgress?.call(sent, total);
-      }
-      await request.sink.close();
-      final response = await client.send(request);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        final body = await response.stream.bytesToString();
-        throw ChatKitServerException(
-          'Failed to upload attachment to storage',
-          statusCode: response.statusCode,
-          error: body.isEmpty ? null : {'body': body},
-        );
-      }
-    } finally {
-      client.close();
+      return castMap(jsonDecode(body));
+    } catch (_) {
+      return {'body': body};
     }
   }
 

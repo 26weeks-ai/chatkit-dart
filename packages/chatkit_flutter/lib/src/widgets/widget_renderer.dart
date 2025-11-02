@@ -203,7 +203,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       case 'toggle':
       case 'radio.group':
       case 'radiogroup':
+      case 'radiogroup':
       case 'date.picker':
+      case 'datepicker':
       case 'datepicker':
       case 'chips':
         return _buildFormControl(component, context);
@@ -2739,136 +2741,40 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     required String searchPlaceholder,
     required String emptyText,
     required Map<String, Object?>? onSearchAction,
-  }) async {
+  }) {
     final initialQuery = _selectSearchQuery[name] ?? '';
-    final searchController = TextEditingController(text: initialQuery);
-    try {
-      return await showModalBottomSheet<_SingleSelectResult>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (context) {
-          String query = initialQuery;
-          return SafeArea(
-            child: DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.7,
-              minChildSize: 0.4,
-              maxChildSize: 0.9,
-              builder: (context, scrollController) {
-                return StatefulBuilder(
-                  builder: (context, setModalState) {
-                    final filtered = _filterSelectOptions(groups, query);
-                    return Column(
-                      children: [
-                        if (searchable)
-                          Padding(
-                            padding: _spacingFromLTRB(context, 16, 8, 16, 8),
-                            child: TextField(
-                              controller: searchController,
-                              autofocus: true,
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.search),
-                                hintText: searchPlaceholder,
-                                border: const OutlineInputBorder(),
-                              ),
-                              onChanged: (value) {
-                                setModalState(() => query = value);
-                                _handleSelectSearch(
-                                  name,
-                                  value,
-                                  onSearchAction,
-                                  context,
-                                );
-                              },
-                            ),
-                          ),
-                        if (loading) const LinearProgressIndicator(),
-                        Expanded(
-                          child: filtered.isEmpty && !loading
-                              ? Center(
-                                  child: Padding(
-                                    padding: _spacingAll(context, 24),
-                                    child: Text(
-                                      emptyText,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                )
-                              : ListView(
-                                  controller: scrollController,
-                                  children: [
-                                    if (clearable && selectedValue != null)
-                                      ListTile(
-                                        leading: const Icon(Icons.clear),
-                                        title: const Text('Clear selection'),
-                                        onTap: () => Navigator.pop(
-                                          context,
-                                          const _SingleSelectResult(
-                                            value: null,
-                                            cleared: true,
-                                          ),
-                                        ),
-                                      ),
-                                    for (final group in filtered) ...[
-                                      if (group.label != null &&
-                                          group.label!.isNotEmpty)
-                                        Padding(
-                                          padding: _spacingFromLTRB(
-                                            context,
-                                            16,
-                                            12,
-                                            16,
-                                            4,
-                                          ),
-                                          child: Text(
-                                            group.label!,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleSmall
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                        ),
-                                      for (final option in group.options)
-                                        RadioListTile<Object?>(
-                                          value: option.value,
-                                          groupValue: selectedValue,
-                                          title: Text(option.label),
-                                          subtitle: option.description != null
-                                              ? Text(option.description!)
-                                              : null,
-                                          secondary: option.icon != null
-                                              ? Icon(
-                                                  _iconFromName(option.icon),
-                                                )
-                                              : null,
-                                          onChanged: option.disabled || loading
-                                              ? null
-                                              : (value) => Navigator.pop(
-                                                    context,
-                                                    _SingleSelectResult(
-                                                      value: option.value,
-                                                    ),
-                                                  ),
-                                        ),
-                                    ],
-                                  ],
-                                ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
+    final inheritedTheme = ChatKitTheme.of(context);
+    return showModalBottomSheet<_SingleSelectResult>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return ChatKitTheme(
+          data: inheritedTheme,
+          child: _SingleSelectSheet(
+            initialQuery: initialQuery,
+            selectedValue: selectedValue,
+            searchable: searchable,
+            loading: loading,
+            clearable: clearable,
+            searchPlaceholder: searchPlaceholder,
+            emptyText: emptyText,
+            optionGroupsResolver: (query) =>
+                _filterSelectOptions(groups, query),
+            onQueryChanged: (query) => _handleSelectSearch(
+              name,
+              query,
+              onSearchAction,
+              context,
             ),
-          );
-        },
-      );
-    } finally {
-      searchController.dispose();
-    }
+            spacingFromLTRB: (ctx, left, top, right, bottom) =>
+                _spacingFromLTRB(ctx, left, top, right, bottom),
+            spacingAll: (ctx, value) => _spacingAll(ctx, value),
+            iconResolver: _iconFromName,
+          ),
+        );
+      },
+    );
   }
 
   Future<_MultiSelectResult?> _showMultiSelectSheet({
@@ -2882,157 +2788,40 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     required String searchPlaceholder,
     required String emptyText,
     required Map<String, Object?>? onSearchAction,
-  }) async {
+  }) {
     final initialQuery = _selectSearchQuery[name] ?? '';
-    final searchController = TextEditingController(text: initialQuery);
-    try {
-      return await showModalBottomSheet<_MultiSelectResult>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (context) {
-          String query = initialQuery;
-          final localSelection = Set<Object?>.from(selectedValues);
-          return SafeArea(
-            child: DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.8,
-              minChildSize: 0.4,
-              maxChildSize: 0.95,
-              builder: (context, scrollController) {
-                return StatefulBuilder(
-                  builder: (context, setModalState) {
-                    final filtered = _filterSelectOptions(groups, query);
-                    final listChildren = <Widget>[];
-                    for (final group in filtered) {
-                      if (group.label != null && group.label!.isNotEmpty) {
-                        listChildren.add(
-                          Padding(
-                            padding: _spacingFromLTRB(context, 16, 12, 16, 4),
-                            child: Text(
-                              group.label!,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        );
-                      }
-                      for (final option in group.options) {
-                        final checked = localSelection.contains(option.value);
-                        listChildren.add(
-                          CheckboxListTile(
-                            value: checked,
-                            title: Text(option.label),
-                            subtitle: option.description != null
-                                ? Text(option.description!)
-                                : null,
-                            secondary: option.icon != null
-                                ? Icon(_iconFromName(option.icon))
-                                : null,
-                            onChanged: option.disabled || loading
-                                ? null
-                                : (value) {
-                                    final next = value ?? false;
-                                    setModalState(() {
-                                      if (next) {
-                                        localSelection.add(option.value);
-                                      } else {
-                                        localSelection.remove(option.value);
-                                      }
-                                    });
-                                  },
-                          ),
-                        );
-                      }
-                    }
-
-                    return Column(
-                      children: [
-                        if (searchable)
-                          Padding(
-                            padding: _spacingFromLTRB(context, 16, 8, 16, 8),
-                            child: TextField(
-                              controller: searchController,
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.search),
-                                hintText: searchPlaceholder,
-                                border: const OutlineInputBorder(),
-                              ),
-                              onChanged: (value) {
-                                setModalState(() => query = value);
-                                _handleSelectSearch(
-                                  name,
-                                  value,
-                                  onSearchAction,
-                                  context,
-                                );
-                              },
-                            ),
-                          ),
-                        if (loading) const LinearProgressIndicator(),
-                        Expanded(
-                          child: filtered.isEmpty && !loading
-                              ? Center(
-                                  child: Padding(
-                                    padding: _spacingAll(context, 24),
-                                    child: Text(
-                                      emptyText,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                )
-                              : ListView(
-                                  controller: scrollController,
-                                  children: listChildren,
-                                ),
-                        ),
-                        Padding(
-                          padding: _spacingFromLTRB(context, 16, 8, 16, 16),
-                          child: Row(
-                            children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, null),
-                                child: const Text('Cancel'),
-                              ),
-                              if (clearable)
-                                TextButton(
-                                  onPressed: () => Navigator.pop(
-                                    context,
-                                    const _MultiSelectResult(
-                                      values: <Object?>{},
-                                      cleared: true,
-                                    ),
-                                  ),
-                                  child: const Text('Clear'),
-                                ),
-                              const Spacer(),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(
-                                  context,
-                                  _MultiSelectResult(
-                                    values: Set<Object?>.from(localSelection),
-                                    cleared: localSelection.isEmpty,
-                                  ),
-                                ),
-                                child: const Text('Apply'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
+    final inheritedTheme = ChatKitTheme.of(context);
+    return showModalBottomSheet<_MultiSelectResult>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return ChatKitTheme(
+          data: inheritedTheme,
+          child: _MultiSelectSheet(
+            initialQuery: initialQuery,
+            initialSelection: selectedValues,
+            searchable: searchable,
+            loading: loading,
+            clearable: clearable,
+            searchPlaceholder: searchPlaceholder,
+            emptyText: emptyText,
+            optionGroupsResolver: (query) =>
+                _filterSelectOptions(groups, query),
+            onQueryChanged: (query) => _handleSelectSearch(
+              name,
+              query,
+              onSearchAction,
+              context,
             ),
-          );
-        },
-      );
-    } finally {
-      searchController.dispose();
-    }
+            spacingFromLTRB: (ctx, left, top, right, bottom) =>
+                _spacingFromLTRB(ctx, left, top, right, bottom),
+            spacingAll: (ctx, value) => _spacingAll(ctx, value),
+            iconResolver: _iconFromName,
+          ),
+        );
+      },
+    );
   }
 
   void _handleSelectSearch(
@@ -4252,10 +4041,11 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
 
     final showLegend = component['showLegend'] as bool? ?? true;
     final showTooltip = component['showTooltip'] as bool? ?? true;
-    final showYAxis = component['showYAxis'] as bool? ?? true;
+    var showYAxisFlag = component['showYAxis'] as bool? ?? true;
 
     final seriesConfigs = <_SeriesConfig>[];
     var globalMax = 0.0;
+    var globalMin = 0.0;
     for (final entry in series.indexed) {
       final config = entry.$2;
       final type = (config['type'] as String? ?? 'line').toLowerCase();
@@ -4271,8 +4061,11 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         final value = row[key];
         values.add((value is num) ? value.toDouble() : null);
       }
-      final maxValue = values.whereType<double>().fold<double>(0, math.max);
+      final iterable = values.whereType<double>().toList();
+      final maxValue = iterable.isEmpty ? 0.0 : iterable.reduce(math.max);
+      final minValue = iterable.isEmpty ? 0.0 : iterable.reduce(math.min);
       globalMax = math.max(globalMax, maxValue);
+      globalMin = math.min(globalMin, minValue);
 
       seriesConfigs.add(
         _SeriesConfig(
@@ -4281,12 +4074,41 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           label: label,
           color: color,
           values: values,
+          stackId: (config['stackId'] ?? config['stack']) as String?,
+          curved: config['smooth'] == true ||
+              ((config['curve'] as String?)?.toLowerCase().contains('smooth') ??
+                  false) ||
+              ((config['curve'] as String?)
+                      ?.toLowerCase()
+                      .contains('monotone') ??
+                  false),
+          fillOpacity: (config['fillOpacity'] as num?)?.toDouble(),
+          strokeWidth: (config['strokeWidth'] as num?)?.toDouble(),
         ),
       );
     }
 
     final allBar = seriesConfigs.every((config) => config.type == 'bar');
     final chartHeight = (component['height'] as num?)?.toDouble() ?? 260;
+    final showGrid = component['showGrid'] as bool? ?? true;
+
+    final yAxisConfig = component['yAxis'];
+    double? minYOverride;
+    double? maxYOverride;
+    showYAxisFlag = component['showYAxis'] as bool? ?? true;
+    if (yAxisConfig is Map<String, Object?>) {
+      showYAxisFlag = !(yAxisConfig['hide'] as bool? ?? false);
+      minYOverride = (yAxisConfig['min'] as num?)?.toDouble();
+      maxYOverride = (yAxisConfig['max'] as num?)?.toDouble();
+    } else if (yAxisConfig is String) {
+      showYAxisFlag = true;
+    }
+    if (minYOverride == null && globalMin < 0) {
+      minYOverride = globalMin * 1.1;
+    }
+    if (maxYOverride == null) {
+      maxYOverride = globalMax == 0 ? 10 : globalMax * 1.1;
+    }
 
     Widget chart;
     if (allBar) {
@@ -4294,22 +4116,26 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         context: context,
         categories: categories,
         configs: seriesConfigs,
-        showYAxis: showYAxis,
+        showYAxis: showYAxisFlag,
         showXAxis: showXAxis,
         showTooltip: showTooltip,
         xLabels: xLabels,
-        maxValue: globalMax,
+        minY: minYOverride,
+        maxY: maxYOverride,
+        showGrid: showGrid,
       );
     } else {
       chart = _buildLineChart(
         context: context,
         categories: categories,
         configs: seriesConfigs,
-        showYAxis: showYAxis,
+        showYAxis: showYAxisFlag,
         showXAxis: showXAxis,
         showTooltip: showTooltip,
         xLabels: xLabels,
-        maxValue: globalMax,
+        minY: minYOverride,
+        maxY: maxYOverride,
+        showGrid: showGrid,
       );
     }
 
@@ -4356,32 +4182,40 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     required bool showXAxis,
     required bool showTooltip,
     required Map<Object?, String> xLabels,
-    required double maxValue,
+    double? minY,
+    double? maxY,
+    required bool showGrid,
   }) {
     final lineBars = <LineChartBarData>[];
-    for (final entry in configs.indexed) {
-      if (entry.$2.type == 'bar') continue;
-      final isArea = entry.$2.type == 'area';
+    double computedMax = 0;
+    double computedMin = 0;
+    for (final config in configs) {
+      if (config.type == 'bar') continue;
       final spots = <FlSpot>[];
-      for (var i = 0; i < entry.$2.values.length; i++) {
-        final value = entry.$2.values[i];
+      for (var i = 0; i < config.values.length; i++) {
+        final value = config.values[i];
         if (value != null) {
           spots.add(FlSpot(i.toDouble(), value));
+          computedMax = math.max(computedMax, value);
+          computedMin = math.min(computedMin, value);
         }
+      }
+      if (spots.isEmpty) {
+        continue;
       }
       lineBars.add(
         LineChartBarData(
           spots: spots,
-          color: entry.$2.color,
-          isCurved: entry.$2.type != 'line' ? true : (configs.length <= 1),
-          barWidth: 3,
+          color: config.color,
+          isCurved: config.curved,
+          barWidth: config.strokeWidth ?? 3,
           preventCurveOverShooting: true,
-          dotData: FlDotData(
-            show: configs.length <= 2,
-          ),
+          dotData: FlDotData(show: configs.length <= 2),
           belowBarData: BarAreaData(
-            show: isArea,
-            color: entry.$2.color.withValues(alpha: 0.20),
+            show: config.type == 'area' || (config.fillOpacity ?? 0) > 0,
+            color: config.color.withValues(
+              alpha: config.fillOpacity ?? (config.type == 'area' ? 0.25 : 0.0),
+            ),
           ),
         ),
       );
@@ -4418,6 +4252,12 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       },
     );
 
+    final effectiveMin = minY ?? (computedMin < 0 ? computedMin * 1.1 : 0);
+    final effectiveMax = maxY ??
+        ((computedMax == 0 && computedMin == 0)
+            ? 10
+            : (computedMax == 0 ? 10 : computedMax * 1.1));
+
     return LineChart(
       LineChartData(
         lineTouchData: LineTouchData(
@@ -4430,12 +4270,12 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           bottomTitles: AxisTitles(sideTitles: bottomTitles),
           leftTitles: AxisTitles(sideTitles: leftTitles),
         ),
-        gridData: const FlGridData(show: true, drawVerticalLine: false),
+        gridData: FlGridData(show: showGrid, drawVerticalLine: false),
         lineBarsData: lineBars,
         minX: 0,
         maxX: (categories.length - 1).toDouble(),
-        minY: 0,
-        maxY: maxValue == 0 ? 10 : maxValue * 1.2,
+        minY: effectiveMin,
+        maxY: effectiveMax,
       ),
     );
   }
@@ -4448,22 +4288,60 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
     required bool showXAxis,
     required bool showTooltip,
     required Map<Object?, String> xLabels,
-    required double maxValue,
+    double? minY,
+    double? maxY,
+    required bool showGrid,
   }) {
     final groups = <BarChartGroupData>[];
+    double computedMax = 0;
+    double computedMin = 0;
     for (var index = 0; index < categories.length; index++) {
       final rods = <BarChartRodData>[];
-      for (final config in configs.indexed) {
-        final value = config.$2.values[index]?.toDouble() ?? 0;
+      final grouped = <String?, List<_SeriesConfig>>{};
+      for (final config in configs) {
+        grouped.putIfAbsent(config.stackId, () => []).add(config);
+      }
+
+      for (final entry in grouped.entries) {
+        final stackId = entry.key;
+        final members = entry.value;
+        if (stackId == null || members.length == 1) {
+          final config = members.first;
+          final value = config.values[index]?.toDouble() ?? 0;
+          computedMax = math.max(computedMax, value);
+          computedMin = math.min(computedMin, value);
+          rods.add(
+            BarChartRodData(
+              toY: value,
+              width: config.strokeWidth ?? 16,
+              borderRadius: _circularRadius(context, 6),
+              color: config.color,
+            ),
+          );
+          continue;
+        }
+
+        double cursor = 0;
+        final stackItems = <BarChartRodStackItem>[];
+        for (final member in members) {
+          final value = member.values[index]?.toDouble() ?? 0;
+          final start = cursor;
+          final end = cursor + value;
+          stackItems.add(BarChartRodStackItem(start, end, member.color));
+          cursor = end;
+          computedMax = math.max(computedMax, end);
+        }
         rods.add(
           BarChartRodData(
-            toY: value,
-            width: 16,
-            borderRadius: _circularRadius(context, 6),
-            color: config.$2.color,
+            toY: cursor,
+            width: members.first.strokeWidth ?? 16,
+            borderRadius: _circularRadius(context, 4),
+            rodStackItems: stackItems,
+            color: members.last.color,
           ),
         );
       }
+
       groups.add(
         BarChartGroupData(
           x: index,
@@ -4504,6 +4382,12 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
       },
     );
 
+    final effectiveMin = minY ?? (computedMin < 0 ? computedMin * 1.1 : 0);
+    final effectiveMax = maxY ??
+        ((computedMax == 0 && computedMin == 0)
+            ? 10
+            : (computedMax == 0 ? 10 : computedMax * 1.1));
+
     return BarChart(
       BarChartData(
         barTouchData: BarTouchData(enabled: showTooltip),
@@ -4514,8 +4398,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           leftTitles: AxisTitles(sideTitles: leftTitles),
         ),
         barGroups: groups,
-        gridData: const FlGridData(show: true, drawVerticalLine: false),
-        maxY: maxValue == 0 ? 10 : maxValue * 1.2,
+        gridData: FlGridData(show: showGrid, drawVerticalLine: false),
+        minY: effectiveMin,
+        maxY: effectiveMax,
       ),
     );
   }
@@ -6739,6 +6624,368 @@ class _SelectOptionGroup {
   final List<_SelectOption> options;
 }
 
+class _SingleSelectSheet extends StatefulWidget {
+  const _SingleSelectSheet({
+    required this.initialQuery,
+    required this.optionGroupsResolver,
+    required this.selectedValue,
+    required this.searchable,
+    required this.loading,
+    required this.clearable,
+    required this.searchPlaceholder,
+    required this.emptyText,
+    required this.onQueryChanged,
+    required this.spacingFromLTRB,
+    required this.spacingAll,
+    required this.iconResolver,
+  });
+
+  final String initialQuery;
+  final List<_SelectOptionGroup> Function(String query) optionGroupsResolver;
+  final Object? selectedValue;
+  final bool searchable;
+  final bool loading;
+  final bool clearable;
+  final String searchPlaceholder;
+  final String emptyText;
+  final ValueChanged<String> onQueryChanged;
+  final EdgeInsets Function(
+    BuildContext context,
+    double left,
+    double top,
+    double right,
+    double bottom,
+  ) spacingFromLTRB;
+  final EdgeInsets Function(BuildContext context, double value) spacingAll;
+  final IconData? Function(String? name) iconResolver;
+
+  @override
+  State<_SingleSelectSheet> createState() => _SingleSelectSheetState();
+}
+
+class _SingleSelectSheetState extends State<_SingleSelectSheet> {
+  late String _query;
+  TextEditingController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.initialQuery;
+    if (widget.searchable) {
+      _controller = TextEditingController(text: _query);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _handleQueryChanged(String value) {
+    setState(() {
+      _query = value;
+    });
+    widget.onQueryChanged(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.optionGroupsResolver(_query);
+    return SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) {
+          return Column(
+            children: [
+              if (widget.searchable)
+                Padding(
+                  padding: widget.spacingFromLTRB(context, 16, 8, 16, 8),
+                  child: TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: widget.searchPlaceholder,
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: _handleQueryChanged,
+                  ),
+                ),
+              if (widget.loading) const LinearProgressIndicator(),
+              Expanded(
+                child: filtered.isEmpty && !widget.loading
+                    ? Center(
+                        child: Padding(
+                          padding: widget.spacingAll(context, 24),
+                          child: Text(
+                            widget.emptyText,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        controller: scrollController,
+                        children: [
+                          if (widget.clearable && widget.selectedValue != null)
+                            ListTile(
+                              leading: const Icon(Icons.clear),
+                              title: const Text('Clear selection'),
+                              onTap: () => Navigator.pop(
+                                context,
+                                const _SingleSelectResult(
+                                  value: null,
+                                  cleared: true,
+                                ),
+                              ),
+                            ),
+                          for (final group in filtered) ...[
+                            if (group.label != null && group.label!.isNotEmpty)
+                              Padding(
+                                padding: widget.spacingFromLTRB(
+                                  context,
+                                  16,
+                                  12,
+                                  16,
+                                  4,
+                                ),
+                                child: Text(
+                                  group.label!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            for (final option in group.options)
+                              RadioListTile<Object?>(
+                                value: option.value,
+                                groupValue: widget.selectedValue,
+                                title: Text(option.label),
+                                subtitle: option.description != null
+                                    ? Text(option.description!)
+                                    : null,
+                                secondary: option.icon != null
+                                    ? Icon(widget.iconResolver(option.icon))
+                                    : null,
+                                onChanged: option.disabled || widget.loading
+                                    ? null
+                                    : (_) => Navigator.pop(
+                                          context,
+                                          _SingleSelectResult(
+                                            value: option.value,
+                                          ),
+                                        ),
+                              ),
+                          ],
+                        ],
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MultiSelectSheet extends StatefulWidget {
+  const _MultiSelectSheet({
+    required this.initialQuery,
+    required this.initialSelection,
+    required this.optionGroupsResolver,
+    required this.searchable,
+    required this.loading,
+    required this.clearable,
+    required this.searchPlaceholder,
+    required this.emptyText,
+    required this.onQueryChanged,
+    required this.spacingFromLTRB,
+    required this.spacingAll,
+    required this.iconResolver,
+  });
+
+  final String initialQuery;
+  final Set<Object?> initialSelection;
+  final List<_SelectOptionGroup> Function(String query) optionGroupsResolver;
+  final bool searchable;
+  final bool loading;
+  final bool clearable;
+  final String searchPlaceholder;
+  final String emptyText;
+  final ValueChanged<String> onQueryChanged;
+  final EdgeInsets Function(
+    BuildContext context,
+    double left,
+    double top,
+    double right,
+    double bottom,
+  ) spacingFromLTRB;
+  final EdgeInsets Function(BuildContext context, double value) spacingAll;
+  final IconData? Function(String? name) iconResolver;
+
+  @override
+  State<_MultiSelectSheet> createState() => _MultiSelectSheetState();
+}
+
+class _MultiSelectSheetState extends State<_MultiSelectSheet> {
+  late String _query;
+  late Set<Object?> _localSelection;
+  TextEditingController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.initialQuery;
+    _localSelection = Set<Object?>.from(widget.initialSelection);
+    if (widget.searchable) {
+      _controller = TextEditingController(text: _query);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _handleQueryChanged(String value) {
+    setState(() {
+      _query = value;
+    });
+    widget.onQueryChanged(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.optionGroupsResolver(_query);
+    final listChildren = <Widget>[];
+    for (final group in filtered) {
+      if (group.label != null && group.label!.isNotEmpty) {
+        listChildren.add(
+          Padding(
+            padding: widget.spacingFromLTRB(context, 16, 12, 16, 4),
+            child: Text(
+              group.label!,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        );
+      }
+      for (final option in group.options) {
+        final checked = _localSelection.contains(option.value);
+        listChildren.add(
+          CheckboxListTile(
+            value: checked,
+            title: Text(option.label),
+            subtitle:
+                option.description != null ? Text(option.description!) : null,
+            secondary: option.icon != null
+                ? Icon(widget.iconResolver(option.icon))
+                : null,
+            onChanged: option.disabled || widget.loading
+                ? null
+                : (value) {
+                    final next = value ?? false;
+                    setState(() {
+                      if (next) {
+                        _localSelection.add(option.value);
+                      } else {
+                        _localSelection.remove(option.value);
+                      }
+                    });
+                  },
+          ),
+        );
+      }
+    }
+
+    return SafeArea(
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.8,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) {
+          return Column(
+            children: [
+              if (widget.searchable)
+                Padding(
+                  padding: widget.spacingFromLTRB(context, 16, 8, 16, 8),
+                  child: TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: widget.searchPlaceholder,
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: _handleQueryChanged,
+                  ),
+                ),
+              if (widget.loading) const LinearProgressIndicator(),
+              Expanded(
+                child: filtered.isEmpty && !widget.loading
+                    ? Center(
+                        child: Padding(
+                          padding: widget.spacingAll(context, 24),
+                          child: Text(
+                            widget.emptyText,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        controller: scrollController,
+                        children: listChildren,
+                      ),
+              ),
+              Padding(
+                padding: widget.spacingFromLTRB(context, 16, 8, 16, 16),
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, null),
+                      child: const Text('Cancel'),
+                    ),
+                    if (widget.clearable)
+                      TextButton(
+                        onPressed: () => Navigator.pop(
+                          context,
+                          const _MultiSelectResult(
+                            values: <Object?>{},
+                            cleared: true,
+                          ),
+                        ),
+                        child: const Text('Clear'),
+                      ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        _MultiSelectResult(
+                          values: Set<Object?>.from(_localSelection),
+                          cleared: _localSelection.isEmpty,
+                        ),
+                      ),
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _SelectOption {
   const _SelectOption({
     required this.value,
@@ -6972,6 +7219,10 @@ class _SeriesConfig {
     required this.label,
     required this.color,
     required this.values,
+    this.stackId,
+    this.curved = false,
+    this.fillOpacity,
+    this.strokeWidth,
   });
 
   final String type;
@@ -6979,4 +7230,8 @@ class _SeriesConfig {
   final String label;
   final Color color;
   final List<double?> values;
+  final String? stackId;
+  final bool curved;
+  final double? fillOpacity;
+  final double? strokeWidth;
 }

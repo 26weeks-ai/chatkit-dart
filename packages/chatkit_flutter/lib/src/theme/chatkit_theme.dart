@@ -394,8 +394,9 @@ class ChatKitThemeData {
     final int shade = options.shade?.clamp(-4, 4).toInt() ?? 0;
     final tintOffset = (tint - 4) * 0.012;
     final shadeOffset = shade * 0.02;
-    final computedLightness =
-        (targetLightness + tintOffset - shadeOffset).clamp(0.02, 0.98).toDouble();
+    final computedLightness = (targetLightness + tintOffset - shadeOffset)
+        .clamp(0.02, 0.98)
+        .toDouble();
     final computedSaturation =
         (saturation + shade * 0.01).clamp(0.0, 1.0).toDouble();
 

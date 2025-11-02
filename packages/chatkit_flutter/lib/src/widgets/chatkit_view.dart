@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import 'package:mime/mime.dart';
+import 'package:meta/meta.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../localization/localizations.dart';
@@ -134,9 +135,11 @@ class ChatKitView extends StatefulWidget {
   const ChatKitView({
     super.key,
     required this.controller,
+    this.hideHiddenItems = false,
   });
 
   final ChatKitController controller;
+  final bool hideHiddenItems;
 
   @override
   State<ChatKitView> createState() => _ChatKitViewState();
@@ -211,7 +214,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
     _selectedToolId = composer.selectedToolId;
     _syncTagFocusNodes();
     _thread = controller.activeThread;
-    _items = controller.threadItems;
+    _items = _applyItemFilter(controller.threadItems);
     _subscription = controller.events.listen(_handleEvent);
     _historyScrollController.addListener(_handleHistoryScroll);
     if (controller.currentThreadId == null &&
@@ -329,6 +332,14 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant ChatKitView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.hideHiddenItems != widget.hideHiddenItems) {
+      final updated = widget.hideHiddenItems
+          ? _applyItemFilter(controller.threadItems)
+          : controller.threadItems;
+      setState(() {
+        _items = updated;
+      });
+    }
     _ensureLocaleBundle();
   }
 
@@ -476,7 +487,7 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
       switch (event) {
         case ChatKitThreadChangeEvent(:final threadId):
           _thread = controller.activeThread;
-          _items = controller.threadItems;
+          _items = _applyItemFilter(controller.threadItems);
           if (threadId == null) {
             _composerController.clear();
             _attachments = const [];
@@ -559,24 +570,39 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
     switch (event) {
       case ThreadCreatedEvent(:final thread):
         _thread = thread;
-        _items = controller.threadItems;
+        _items = _applyItemFilter(controller.threadItems);
         _scheduleScrollToBottom();
         break;
       case ThreadItemAddedEvent(:final item):
+        if (!_shouldDisplayItem(item)) {
+          break;
+        }
         _upsertItem(item);
         _scheduleScrollToBottom();
         break;
       case ThreadItemDoneEvent(:final item):
+        if (!_shouldDisplayItem(item)) {
+          break;
+        }
         _upsertItem(item);
         _scheduleScrollToBottom();
         break;
       case ThreadItemUpdatedEvent(:final itemId):
         final updated = controller.threadItemById(itemId);
         if (updated != null) {
-          _upsertItem(updated);
+          if (_shouldDisplayItem(updated)) {
+            _upsertItem(updated);
+          } else {
+            _items =
+                _items.where((element) => element.id != updated.id).toList();
+          }
         }
         break;
       case ThreadItemReplacedEvent(:final item):
+        if (!_shouldDisplayItem(item)) {
+          _items = _items.where((element) => element.id != item.id).toList();
+          break;
+        }
         _upsertItem(item);
         break;
       case ThreadItemRemovedEvent(:final itemId):
@@ -2212,7 +2238,33 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
     controller.setComposerValue(selectedModelId: modelId, tags: _selectedTags);
   }
 
+  bool _shouldDisplayItem(ThreadItem item) {
+    if (!widget.hideHiddenItems) {
+      return true;
+    }
+    if (item.type == 'hidden_context') {
+      return false;
+    }
+    if (item.type == 'workflow') {
+      return false;
+    }
+    return true;
+  }
+
+  List<ThreadItem> _applyItemFilter(List<ThreadItem> items) {
+    if (!widget.hideHiddenItems) {
+      return items;
+    }
+    return items.where(_shouldDisplayItem).toList(growable: false);
+  }
+
   void _upsertItem(ThreadItem item) {
+    if (!_shouldDisplayItem(item)) {
+      if (_items.any((element) => element.id == item.id)) {
+        _items = _items.where((element) => element.id != item.id).toList();
+      }
+      return;
+    }
     final index = _items.indexWhere((element) => element.id == item.id);
     if (index == -1) {
       _items = [..._items, item]
@@ -2223,6 +2275,9 @@ class _ChatKitViewState extends State<ChatKitView> with WidgetsBindingObserver {
       _items = updated;
     }
   }
+
+  @visibleForTesting
+  List<ThreadItem> debugVisibleItems() => List.unmodifiable(_items);
 
   Future<void> _handleSend() async {
     if (_isStreaming || !_composerEnabled || _authExpired) return;
@@ -4474,6 +4529,57 @@ class _WorkflowView extends StatelessWidget {
   }
 }
 
+class _BlinkingPendingIndicator extends StatefulWidget {
+  const _BlinkingPendingIndicator();
+
+  @override
+  State<_BlinkingPendingIndicator> createState() =>
+      _BlinkingPendingIndicatorState();
+}
+
+class _BlinkingPendingIndicatorState extends State<_BlinkingPendingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+      lowerBound: 0.35,
+      upperBound: 1.0,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: _spacingOnly(context, right: 8),
+      child: SizedBox(
+        width: 10,
+        height: 10,
+        child: FadeTransition(
+          opacity: _controller,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.composerController,
@@ -4740,6 +4846,7 @@ class _Composer extends StatelessWidget {
           ),
         Row(
           children: [
+            if (isStreaming) const _BlinkingPendingIndicator(),
             if (onAttachment != null)
               IconButton(
                 icon: Icon(

@@ -52,6 +52,43 @@ class _FailingApiClient extends ChatKitApiClient {
   }
 }
 
+class _FailThenSucceedApiClient extends ChatKitApiClient {
+  _FailThenSucceedApiClient()
+      : super(
+          apiConfig: const CustomApiConfig(url: 'https://example.com/chatkit'),
+        );
+
+  bool _failedOnce = false;
+
+  @override
+  Future<Map<String, Object?>> send(
+    ChatKitRequest request, {
+    Map<String, Object?> bodyOverrides = const {},
+  }) async {
+    if (!_failedOnce) {
+      _failedOnce = true;
+      throw ChatKitServerException(
+        'failure',
+        statusCode: 401,
+        error: const {'code': 'auth_expired'},
+      );
+    }
+    return const {};
+  }
+
+  @override
+  Future<void> sendStreaming(
+    ChatKitRequest request, {
+    required StreamEventCallback onEvent,
+    void Function()? onDone,
+    void Function(Object error, StackTrace stackTrace)? onError,
+    Duration? keepAliveTimeout,
+    void Function()? onKeepAliveTimeout,
+    void Function(Duration duration)? onRetrySuggested,
+    Map<String, Object?> bodyOverrides = const {},
+  }) async {}
+}
+
 void main() {
   test('stale client notice triggers handshake and restores composer',
       () async {
@@ -129,6 +166,35 @@ void main() {
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(restoredCalls, 1);
+
+    await controller.dispose();
+  });
+
+  test('auth restore hook fires on next successful request without notice',
+      () async {
+    var expiredCalls = 0;
+    var restoredCalls = 0;
+    final controller = ChatKitController(
+      ChatKitOptions(
+        api: const CustomApiConfig(url: 'https://example.com/chatkit'),
+        hostedHooks: HostedHooksOption(
+          onAuthExpired: () => expiredCalls += 1,
+          onAuthRestored: () => restoredCalls += 1,
+        ),
+      ),
+      apiClient: _FailThenSucceedApiClient(),
+    );
+
+    await expectLater(
+      controller.listThreads(),
+      throwsA(isA<ChatKitServerException>()),
+    );
+    expect(expiredCalls, 1);
+    expect(restoredCalls, 0);
+
+    final page = await controller.listThreads();
+    expect(page.data, isEmpty);
     expect(restoredCalls, 1);
 
     await controller.dispose();

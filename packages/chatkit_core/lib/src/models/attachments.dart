@@ -8,6 +8,9 @@ sealed class ChatKitAttachment {
     required this.mimeType,
     this.uploadUrl,
     this.size,
+    this.uploadMethod,
+    this.uploadFields,
+    this.uploadHeaders,
   });
 
   final String id;
@@ -15,6 +18,9 @@ sealed class ChatKitAttachment {
   final String mimeType;
   final String? uploadUrl;
   final int? size;
+  final String? uploadMethod;
+  final Map<String, String>? uploadFields;
+  final Map<String, String>? uploadHeaders;
 
   String get type;
 
@@ -23,6 +29,9 @@ sealed class ChatKitAttachment {
   static ChatKitAttachment fromJson(Map<String, Object?> json) {
     final type = json['type'] as String? ?? 'file';
     final size = _parseSize(json['size'] ?? json['file_size']);
+    final uploadMethod = _string(json['upload_method']);
+    final uploadFields = _stringMap(json['upload_fields']);
+    final uploadHeaders = _stringMap(json['upload_headers']);
     switch (type) {
       case 'image':
         return ImageAttachment(
@@ -36,6 +45,9 @@ sealed class ChatKitAttachment {
               '',
           uploadUrl: json['upload_url'] as String?,
           size: size,
+          uploadMethod: uploadMethod,
+          uploadFields: uploadFields,
+          uploadHeaders: uploadHeaders,
         );
       default:
         return FileAttachment(
@@ -46,6 +58,9 @@ sealed class ChatKitAttachment {
               'application/octet-stream',
           uploadUrl: json['upload_url'] as String?,
           size: size,
+          uploadMethod: uploadMethod,
+          uploadFields: uploadFields,
+          uploadHeaders: uploadHeaders,
         );
     }
   }
@@ -58,6 +73,9 @@ class FileAttachment extends ChatKitAttachment {
     required super.mimeType,
     super.uploadUrl,
     super.size,
+    super.uploadMethod,
+    super.uploadFields,
+    super.uploadHeaders,
   });
 
   @override
@@ -82,6 +100,9 @@ class ImageAttachment extends ChatKitAttachment {
     required this.previewUrl,
     super.uploadUrl,
     super.size,
+    super.uploadMethod,
+    super.uploadFields,
+    super.uploadHeaders,
   });
 
   final String previewUrl;
@@ -110,6 +131,34 @@ int? _parseSize(Object? raw) {
   }
   if (raw is String) {
     return int.tryParse(raw);
+  }
+  return null;
+}
+
+String? _string(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is String) {
+    return value;
+  }
+  return value.toString();
+}
+
+Map<String, String>? _stringMap(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is Map) {
+    final map = <String, String>{};
+    value.forEach((key, entryValue) {
+      final keyString = _string(key);
+      final valueString = _string(entryValue);
+      if (keyString != null && valueString != null) {
+        map[keyString] = valueString;
+      }
+    });
+    return map.isEmpty ? null : map;
   }
   return null;
 }
