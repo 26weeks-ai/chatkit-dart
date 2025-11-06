@@ -755,7 +755,8 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
         (component['tone'] as String? ?? component['intent'] as String? ?? '')
             .toLowerCase()
             .trim();
-    final action = component['action'] as Map<String, Object?>?;
+    final action = (component['action'] as Map<String, Object?>?) ??
+        (component['onClickAction'] as Map<String, Object?>?);
     final disabled = component['disabled'] as bool? ?? false;
     final isLoading = action != null && _pendingSelfActions.contains(action);
     final effectiveDisabled = disabled || isLoading;
