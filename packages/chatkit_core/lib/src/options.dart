@@ -732,6 +732,7 @@ class ToolOption {
     this.placeholderOverride,
     this.icon,
     this.pinned = false,
+    this.persistent = false,
   })  : assert(id != null || name != null, 'ToolOption.id is required'),
         id = id ?? (name as String);
 
@@ -742,6 +743,7 @@ class ToolOption {
   final String? placeholderOverride;
   final String? icon;
   final bool pinned;
+  final bool persistent;
 
   @Deprecated('Use id')
   String get name => id;

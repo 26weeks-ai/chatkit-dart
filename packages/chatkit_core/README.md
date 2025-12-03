@@ -82,7 +82,7 @@ You can still override individual strings at runtime via `localizationOverrides`
 ## API parity
 
 - Methods: `focusComposer`, `setThreadId`, `setComposerValue`, `sendUserMessage`, `sendCustomAction`, `fetchUpdates`, `retryAfterItem`, `submitFeedback`, `deleteThread`, `listThreads`, `renameThread`, `shareItem`, `registerAttachment`.
-- Events: `chatkit.thread.change`, `chatkit.response.start`, `chatkit.response.end`, `chatkit.error`, `chatkit.log`, `chatkit.composer.change`, `chatkit.composer.focus`, `chatkit.message.share`, and raw thread stream events identical to ChatKit JS.
+- Events: `chatkit.ready`, `chatkit.effect`, `chatkit.thread.change`, `chatkit.thread.load.start`, `chatkit.thread.load.end`, `chatkit.response.start`, `chatkit.response.end`, `chatkit.error`, `chatkit.log`, `chatkit.composer.change`, `chatkit.composer.focus`, `chatkit.message.share`, and raw thread stream events identical to ChatKit JS.
 
 ## Testing
 

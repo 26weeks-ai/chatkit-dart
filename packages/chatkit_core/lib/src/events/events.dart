@@ -37,6 +37,10 @@ class ChatKitThreadLoadEndEvent extends ChatKitEvent {
   final String threadId;
 }
 
+class ChatKitReadyEvent extends ChatKitEvent {
+  const ChatKitReadyEvent() : super('chatkit.ready');
+}
+
 class ChatKitResponseStartEvent extends ChatKitEvent {
   ChatKitResponseStartEvent({
     required this.threadId,
@@ -74,6 +78,16 @@ class ChatKitLogEvent extends ChatKitEvent {
     required this.name,
     this.data = const {},
   }) : super('chatkit.log');
+
+  final String name;
+  final Map<String, Object?> data;
+}
+
+class ChatKitEffectEvent extends ChatKitEvent {
+  ChatKitEffectEvent({
+    required this.name,
+    this.data = const {},
+  }) : super('chatkit.effect');
 
   final String name;
   final Map<String, Object?> data;

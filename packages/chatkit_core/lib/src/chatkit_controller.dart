@@ -33,6 +33,7 @@ class ChatKitController {
         _apiClient = apiClient ?? ChatKitApiClient(apiConfig: options.api),
         _uploadClient = uploadClient ?? http.Client() {
     _apiClient.acceptLanguage = options.locale;
+    _emitReady();
   }
 
   final ChatKitApiClient _apiClient;
@@ -62,6 +63,7 @@ class ChatKitController {
   bool _handshakeInProgress = false;
   Timer? _resumeFetchTimer;
   DateTime? _lastForegroundFetch;
+  bool _readyEmitted = false;
 
   Stream<ChatKitEvent> get events => _eventController.stream;
 
@@ -296,11 +298,16 @@ class ChatKitController {
             metadata: metadata,
           );
 
+    final selectedToolId = _composerState.selectedToolId;
+    final nextSelectedToolId =
+        _isToolPersistent(selectedToolId) ? selectedToolId : null;
+
     await setComposerValue(
       text: '',
       reply: null,
       attachments: const [],
       tags: const <Entity>[],
+      selectedToolId: nextSelectedToolId,
     );
 
     try {
@@ -1412,6 +1419,19 @@ class ChatKitController {
       _handleNoticeEvent(event);
       return;
     }
+    if (event is EffectEvent) {
+      _eventController.add(
+        ChatKitEffectEvent(name: event.name, data: event.data),
+      );
+      _emitLog(
+        'effect',
+        {
+          'name': event.name,
+          if (event.data.isNotEmpty) 'data': event.data,
+        },
+      );
+      return;
+    }
 
     _eventController.add(ChatKitThreadEvent(streamEvent: event));
   }
@@ -1451,6 +1471,16 @@ class ChatKitController {
     final normalized = event.message.trim().toLowerCase();
     return normalized.contains('stale client') ||
         normalized.contains('client stale');
+  }
+
+  void _emitReady() {
+    if (_readyEmitted) {
+      return;
+    }
+    _readyEmitted = true;
+    scheduleMicrotask(
+      () => _eventController.add(const ChatKitReadyEvent()),
+    );
   }
 
   void _handleStaleClientNotice(NoticeEvent event) {
@@ -1809,6 +1839,15 @@ class ChatKitController {
       toolChoice:
           selectedToolId != null ? ToolChoice(id: selectedToolId) : null,
     );
+  }
+
+  bool _isToolPersistent(String? toolId) {
+    if (toolId == null || toolId.isEmpty) {
+      return false;
+    }
+    final tools = _options.composer?.tools;
+    final tool = tools?.firstWhereOrNull((tool) => tool.id == toolId);
+    return tool?.persistent ?? false;
   }
 
   Future<Map<String, Object?>?> _uploadToUrl(

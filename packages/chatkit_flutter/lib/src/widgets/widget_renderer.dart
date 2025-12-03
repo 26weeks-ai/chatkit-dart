@@ -1847,7 +1847,9 @@ class _ChatKitWidgetRendererState extends State<ChatKitWidgetRenderer> {
           ],
         );
       case 'checkbox':
-        final checked = component['defaultValue'] as bool? ?? false;
+        final checked = (component['defaultChecked'] as bool?) ??
+            (component['defaultValue'] as bool?) ??
+            false;
         _boolValues.putIfAbsent(name, () => checked);
         return CheckboxListTile(
           value: _boolValues[name] ?? checked,

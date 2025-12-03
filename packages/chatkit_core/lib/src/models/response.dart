@@ -60,6 +60,13 @@ sealed class ThreadStreamEvent {
           code: json['code'] as String?,
           data: castMap(json['data']),
         );
+      case 'effect':
+      case 'client.effect':
+      case 'client_effect':
+        return EffectEvent(
+          name: (json['name'] as String?) ?? '',
+          data: castMap(json['data']),
+        );
       default:
         return UnknownStreamEvent(raw: json);
     }
@@ -159,6 +166,17 @@ class NoticeEvent extends ThreadStreamEvent {
   final String message;
   final String? title;
   final String? code;
+  final Map<String, Object?> data;
+}
+
+class EffectEvent extends ThreadStreamEvent {
+  EffectEvent({
+    required this.name,
+    Map<String, Object?> data = const {},
+  })  : data = data.isNotEmpty ? Map<String, Object?>.from(data) : const {},
+        super('effect');
+
+  final String name;
   final Map<String, Object?> data;
 }
 

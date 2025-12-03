@@ -99,6 +99,7 @@ final controller = ChatKitController(
           label: 'Browser',
           description: 'Search the web for updated info',
           placeholderOverride: 'Search for…',
+          persistent: true, // keep the tool selected after sending a message
         ),
       ],
     ),
